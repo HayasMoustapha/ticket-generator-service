@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const ticketsController = require('../controllers/tickets.controller');
-const { authenticate, requirePermission } = require('../middleware/auth');
-const { validate, schemas } = require('../middleware/validation');
+const { authenticate, requirePermission } = require('../../middleware/auth');
+const { validate, schemas } = require('../../middleware/validation');
 
 /**
  * Routes pour la génération de tickets
