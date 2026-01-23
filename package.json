@@ -2,6 +2,28 @@
   "name": "ticket-generator-service",
   "version": "1.0.0",
   "description": "Ticket Generator Service - QR codes, PDF tickets, batch processing",
+  "keywords": [
+    "event-planner",
+    "ticket-generator",
+    "qr-code",
+    "pdf",
+    "nodejs",
+    "express",
+    "backend",
+    "api",
+    "saas"
+  ],
+  "homepage": "https://github.com/HayasMoustapha/ticket-generator-service#readme",
+  "bugs": {
+    "url": "https://github.com/HayasMoustapha/ticket-generator-service/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HayasMoustapha/ticket-generator-service.git"
+  },
+  "license": "MIT",
+  "author": "Hassid Belkassim",
+  "type": "commonjs",
   "main": "src/server.js",
   "directories": {
     "test": "tests"
@@ -14,19 +36,6 @@
     "test:coverage": "NODE_ENV=test jest --coverage",
     "test:ci": "NODE_ENV=test jest --ci --coverage --watchAll=false"
   },
-  "keywords": [
-    "event-planner",
-    "ticket-generator",
-    "qr-code",
-    "pdf",
-    "nodejs",
-    "express",
-    "backend",
-    "api",
-    "saas"
-  ],
-  "author": "Hassid Belkassim",
-  "license": "MIT",
   "dependencies": {
     "axios": "^1.13.2",
     "bull": "^4.12.2",
