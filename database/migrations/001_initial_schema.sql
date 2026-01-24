@@ -1,10 +1,6 @@
 -- Ticket Generator Service Database Schema
 -- Based on ticket-generaor-diagram.md and event-planner-core-diagram.md
 
--- Create database if not exists
-CREATE DATABASE IF NOT EXISTS event_planner_tickets;
-\c event_planner_tickets;
-
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
