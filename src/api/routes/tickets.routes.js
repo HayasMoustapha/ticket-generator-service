@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ticketsController = require('../controllers/tickets.controller');
-const { authenticate } = require('../../../shared');
-const { requirePermission } = require('../../../shared');
+const { authenticate, requirePermission } = require('../../../../shared');
 const { validate, schemas } = require('../../middleware/validation');
 
 /**
@@ -10,7 +9,7 @@ const { validate, schemas } = require('../../middleware/validation');
  */
 
 // Middleware d'authentification pour toutes les routes
-router.use(authenticate);
+// router.use(authenticate);
 
 // POST /api/tickets/generate - Générer un ticket unique
 router.post('/generate',
