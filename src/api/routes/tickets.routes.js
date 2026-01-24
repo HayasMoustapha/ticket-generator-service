@@ -11,6 +11,12 @@ const { validate, schemas } = require('../../middleware/validation');
 // Middleware d'authentification pour toutes les routes
 router.use(authenticate);
 
+// POST /api/tickets/qr/generate - Générer un QR code pour un ticket
+router.post('/qr/generate',
+  requirePermission('tickets.create'),
+  ticketsController.generateQRCode
+);
+
 // POST /api/tickets/generate - Générer un ticket unique
 router.post('/generate',
   requirePermission('tickets.create'),

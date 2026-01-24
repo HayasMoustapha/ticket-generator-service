@@ -10,6 +10,74 @@ const logger = require('../../utils/logger');
  */
 class TicketsController {
   /**
+   * Génère un QR code pour un ticket (endpoint dédié)
+   * @param {Object} req - Requête Express
+   * @param {Object} res - Réponse Express
+   * @param {Function} next - Middleware suivant
+   */
+  async generateQRCode(req, res, next) {
+    try {
+      const { ticketCode, ticketId, eventId, format = 'base64', size = 'medium' } = req.body;
+      
+      // Validation des données
+      if (!ticketCode || !ticketId) {
+        return res.status(400).json(
+          errorResponse('Ticket code et ticket ID requis', null, 'INVALID_QR_DATA')
+        );
+      }
+
+      // Préparer les données pour le service QR
+      const qrData = {
+        id: ticketId,
+        eventId: eventId || null,
+        code: ticketCode,
+        type: 'TICKET'
+      };
+
+      // Options de génération
+      const qrOptions = {
+        format,
+        size,
+        includeLogo: false,
+        errorCorrection: 'M'
+      };
+
+      // Générer le QR code
+      const qrResult = await qrCodeService.generateTicketQRCode(qrData, qrOptions);
+      
+      if (!qrResult.success) {
+        return res.status(500).json(
+          errorResponse(qrResult.error, null, 'QR_GENERATION_FAILED')
+        );
+      }
+
+      logger.info('QR code generated successfully', {
+        ticketId,
+        ticketCode,
+        format,
+        size
+      });
+
+      return res.status(201).json(
+        createdResponse('QR code généré avec succès', {
+          ticketId,
+          ticketCode,
+          qrCodeData: qrResult.qrCode,
+          checksum: qrResult.signature,
+          url: qrResult.url,
+          generatedAt: qrResult.generatedAt
+        })
+      );
+    } catch (error) {
+      logger.error('QR code generation failed', {
+        error: error.message,
+        stack: error.stack
+      });
+      next(error);
+    }
+  }
+
+  /**
    * Génère un ticket unique
    * @param {Object} req - Requête Express
    * @param {Object} res - Réponse Express
