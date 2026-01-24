@@ -9,7 +9,7 @@ const { validate, schemas } = require('../../middleware/validation');
  */
 
 // Middleware d'authentification pour toutes les routes
-// router.use(authenticate);
+router.use(authenticate);
 
 // POST /api/tickets/generate - Générer un ticket unique
 router.post('/generate',
