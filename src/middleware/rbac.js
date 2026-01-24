@@ -28,14 +28,15 @@ const requirePermission = (permission) => {
         });
       }
 
-      if (!permissionResult.data.has_permission && !permissionResult.allowed) {
+      // Check permission using the normalized 'allowed' field from authClient
+      if (!permissionResult.allowed) {
         return res.status(403).json({
           error: 'Permission denied',
           message: `Required permission: ${permission}`
         });
       }
 
-      req.userPermissions = permissionResult.data.permissions || [];
+      req.userPermissions = permissionResult.permissions || [];
       next();
     } catch (error) {
       console.error('RBAC error:', error);
@@ -64,8 +65,9 @@ const requirePermissions = (permissions, mode = 'all') => {
         )
       );
 
-      const hasPermissions = permissionChecks.map(check => 
-        check.success && check.data.has_permission
+      // Use the normalized 'allowed' field from authClient
+      const hasPermissions = permissionChecks.map(check =>
+        check.success && check.allowed
       );
 
       let authorized;
@@ -84,7 +86,7 @@ const requirePermissions = (permissions, mode = 'all') => {
 
       req.userPermissions = permissionChecks
         .filter(check => check.success)
-        .flatMap(check => check.data.permissions || []);
+        .flatMap(check => check.permissions || []);
       
       next();
     } catch (error) {

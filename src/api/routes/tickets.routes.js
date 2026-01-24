@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const ticketsController = require('../controllers/tickets.controller');
-const { authenticate, requirePermission } = require('../../middleware/auth');
+const { authenticate } = require('../../middleware/auth');
+const { requirePermission } = require('../../middleware/rbac');
 const { validate, schemas } = require('../../middleware/validation');
 
 /**

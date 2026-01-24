@@ -1,4 +1,3 @@
-const jwt = require('jsonwebtoken');
 const { authClient } = require('../config');
 
 const authenticate = async (req, res, next) => {
@@ -75,7 +74,7 @@ const optionalAuthenticate = async (req, res, next) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_for_validation');
+    // Validate with Auth Service only (consistent with authenticate middleware)
     const authResult = await authClient.validateToken(token);
     
     if (authResult.success) {
