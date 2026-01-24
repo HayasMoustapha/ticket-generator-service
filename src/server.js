@@ -11,7 +11,7 @@ const morgan = require('morgan');
 const logger = require('./utils/logger');
 const healthRoutes = require('./health/health.routes');
 const ticketsRoutes = require('./api/routes/tickets.routes');
-const migrator = require('./database/migrator');
+const bootstrap = require("./bootstrap");
 
 /**
  * Serveur principal du Ticket Generator Service
@@ -214,16 +214,9 @@ class TicketGeneratorServer {
    */
   async start() {
     try {
-      // Run database migrations first
-      logger.info('🔄 Running database migrations...');
-      const migrationResult = await migrator.migrate();
+      // Bootstrap automatique (crée la BD et applique les migrations)
+      await bootstrap.initialize();
       
-      if (migrationResult.executed > 0) {
-        logger.info(`✅ Successfully executed ${migrationResult.executed} migrations`);
-      } else {
-        logger.info('✅ Database is up to date');
-      }
-
       logger.info('🚀 Starting Ticket Generator Service server...');
       
       this.server = this.app.listen(this.port, () => {
