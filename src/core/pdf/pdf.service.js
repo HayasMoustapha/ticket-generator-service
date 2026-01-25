@@ -2,6 +2,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const qrCodeService = require('../qrcode/qrcode.service');
 const logger = require('../../utils/logger');
 
 /**

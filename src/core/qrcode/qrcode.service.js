@@ -1,5 +1,6 @@
 const QRCode = require('qrcode');
 const crypto = require('crypto');
+const redis = require('../../config/redis');
 const logger = require('../../utils/logger');
 
 /**
@@ -256,15 +257,14 @@ class QRCodeService {
    */
   async checkNonceReplay(nonce) {
     try {
-      // Cette méthode nécessite une connexion Redis ou base de données
-      // Pour l'instant, retourne false (à implémenter avec Redis)
+      if (!redis.isReady()) {
+        logger.warn('Redis not available, skipping nonce replay check');
+        return false;
+      }
       
-      // Implémentation avec Redis:
-      // const redis = require('../../config/redis');
-      // const exists = await redis.exists(`qr_nonce:${nonce}`);
-      // return exists === 1;
-      
-      return false; // Placeholder
+      const nonceKey = `qr_nonce:${nonce}`;
+      const exists = await redis.exists(nonceKey);
+      return exists;
     } catch (error) {
       logger.error('Nonce replay check failed', {
         nonce,
@@ -282,14 +282,22 @@ class QRCodeService {
    */
   async markNonceAsUsed(nonce, ticketId) {
     try {
-      // Cette méthode nécessite une connexion Redis ou base de données
-      // Pour l'instant, retourne true (à implémenter avec Redis)
+      if (!redis.isReady()) {
+        logger.warn('Redis not available, skipping nonce marking');
+        return true; // Continue without Redis
+      }
       
-      // Implémentation avec Redis:
-      // const redis = require('../../config/redis');
-      // await redis.setex(`qr_nonce:${nonce}`, 24 * 60 * 60, ticketId); // 24h TTL
+      const nonceKey = `qr_nonce:${nonce}`;
+      const ttl = 24 * 60 * 60; // 24 heures en secondes
       
-      return true; // Placeholder
+      // Stocker le nonce avec le ticket ID et TTL
+      const success = await redis.setWithTTL(nonceKey, ticketId, ttl);
+      
+      if (success) {
+        logger.info('Nonce marked as used', { nonce, ticketId, ttl });
+      }
+      
+      return success;
     } catch (error) {
       logger.error('Nonce marking failed', {
         nonce,
