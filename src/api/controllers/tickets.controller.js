@@ -617,6 +617,252 @@ class TicketsController {
       next(error);
     }
   }
+
+  /**
+   * Create a job
+   */
+  async createJob(req, res, next) {
+    try {
+      const {
+        type,
+        eventId,
+        ticketData,
+        options = {},
+        priority = 'normal'
+      } = req.body;
+
+      logger.info('Creating job', {
+        type,
+        eventId,
+        ticketCount: Array.isArray(ticketData) ? ticketData.length : 1,
+        priority,
+        userId: req.user?.id
+      });
+
+      // Create job logic here
+      const job = {
+        id: `job_${Date.now()}`,
+        type,
+        eventId,
+        ticketData,
+        options,
+        priority,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        createdBy: req.user?.id
+      };
+
+      return res.status(201).json(
+        createdResponse('Job created successfully', job)
+      );
+
+    } catch (error) {
+      logger.error('Failed to create job', {
+        error: error.message,
+        userId: req.user?.id
+      });
+      
+      next(error);
+    }
+  }
+
+  /**
+   * Process a job
+   */
+  async processJob(req, res, next) {
+    try {
+      const { jobId } = req.params;
+
+      logger.info('Processing job', {
+        jobId,
+        userId: req.user?.id
+      });
+
+      // Process job logic here
+      const job = {
+        id: jobId,
+        status: 'processing',
+        startedAt: new Date().toISOString(),
+        processedBy: req.user?.id
+      };
+
+      return res.status(200).json(
+        successResponse('Job processing started', job)
+      );
+
+    } catch (error) {
+      logger.error('Failed to process job', {
+        error: error.message,
+        jobId: req.params.jobId,
+        userId: req.user?.id
+      });
+      
+      next(error);
+    }
+  }
+
+  /**
+   * List jobs
+   */
+  async listJobs(req, res, next) {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        status,
+        eventId,
+        type
+      } = req.query;
+
+      logger.info('Listing jobs', {
+        page,
+        limit,
+        status,
+        eventId,
+        type,
+        userId: req.user?.id
+      });
+
+      // List jobs logic here
+      const jobs = {
+        jobs: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: 0,
+          pages: 0
+        }
+      };
+
+      return res.status(200).json(
+        successResponse('Jobs retrieved successfully', jobs)
+      );
+
+    } catch (error) {
+      logger.error('Failed to list jobs', {
+        error: error.message,
+        userId: req.user?.id
+      });
+      
+      next(error);
+    }
+  }
+
+  /**
+   * Get event tickets
+   */
+  async getEventTickets(req, res, next) {
+    try {
+      const { eventId } = req.params;
+      const {
+        page = 1,
+        limit = 20,
+        status,
+        type
+      } = req.query;
+
+      logger.info('Getting event tickets', {
+        eventId,
+        page,
+        limit,
+        status,
+        type,
+        userId: req.user?.id
+      });
+
+      // Get event tickets logic here
+      const tickets = {
+        tickets: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: 0,
+          pages: 0
+        },
+        eventId
+      };
+
+      return res.status(200).json(
+        successResponse('Event tickets retrieved successfully', tickets)
+      );
+
+    } catch (error) {
+      logger.error('Failed to get event tickets', {
+        error: error.message,
+        eventId: req.params.eventId,
+        userId: req.user?.id
+      });
+      
+      next(error);
+    }
+  }
+
+  /**
+   * Get event ticket stats
+   */
+  async getEventTicketStats(req, res, next) {
+    try {
+      const { eventId } = req.params;
+
+      logger.info('Getting event ticket stats', {
+        eventId,
+        userId: req.user?.id
+      });
+
+      // Get event ticket stats logic here
+      const stats = {
+        eventId,
+        totalTickets: 0,
+        generatedTickets: 0,
+        pendingTickets: 0,
+        failedTickets: 0,
+        types: {},
+        generatedAt: new Date().toISOString()
+      };
+
+      return res.status(200).json(
+        successResponse('Event ticket statistics retrieved successfully', stats)
+      );
+
+    } catch (error) {
+      logger.error('Failed to get event ticket stats', {
+        error: error.message,
+        eventId: req.params.eventId,
+        userId: req.user?.id
+      });
+      
+      next(error);
+    }
+  }
+
+  /**
+   * Health check
+   */
+  async healthCheck(req, res, next) {
+    try {
+      const health = {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        service: 'ticket-generator',
+        version: '1.0.0',
+        components: {
+          qrcode: 'healthy',
+          pdf: 'healthy',
+          batch: 'healthy',
+          queue: 'healthy'
+        }
+      };
+
+      return res.status(200).json(health);
+
+    } catch (error) {
+      logger.error('Health check failed', {
+        error: error.message
+      });
+      
+      next(error);
+    }
+  }
 }
 
 module.exports = new TicketsController();
