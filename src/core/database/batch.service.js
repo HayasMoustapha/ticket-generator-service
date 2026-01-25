@@ -27,36 +27,39 @@ class BatchService {
    */
   initializeQueues() {
     try {
+      const redisConfig = {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: process.env.REDIS_PORT || 6379,
+        db: parseInt(process.env.QUEUE_REDIS_URL?.split('/')[3]) || 2
+      };
+      
+      // Ajouter le mot de passe seulement s'il est défini
+      if (process.env.REDIS_PASSWORD) {
+        redisConfig.password = process.env.REDIS_PASSWORD;
+      }
+      
+      console.log('🔗 Initializing Redis queues with config:', {
+        host: redisConfig.host,
+        port: redisConfig.port,
+        db: redisConfig.db,
+        hasPassword: !!redisConfig.password
+      });
+      
       // Queue pour la génération de tickets
       this.queues.set('ticket-generation', new Queue('ticket generation', {
-        redis: {
-          port: process.env.REDIS_PORT || 6379,
-          host: process.env.REDIS_HOST || 'localhost',
-          password: process.env.REDIS_PASSWORD,
-          db: parseInt(process.env.QUEUE_REDIS_URL?.split('/')[3]) || 2
-        },
+        redis: redisConfig,
         defaultJobOptions: this.jobOptions
       }));
 
       // Queue pour la génération PDF
       this.queues.set('pdf-generation', new Queue('pdf generation', {
-        redis: {
-          port: process.env.REDIS_PORT || 6379,
-          host: process.env.REDIS_HOST || 'localhost',
-          password: process.env.REDIS_PASSWORD,
-          db: parseInt(process.env.QUEUE_REDIS_URL?.split('/')[3]) || 2
-        },
+        redis: redisConfig,
         defaultJobOptions: this.jobOptions
       }));
 
       // Queue pour le traitement batch
       this.queues.set('batch-processing', new Queue('batch processing', {
-        redis: {
-          port: process.env.REDIS_PORT || 6379,
-          host: process.env.REDIS_HOST || 'localhost',
-          password: process.env.REDIS_PASSWORD,
-          db: parseInt(process.env.QUEUE_REDIS_URL?.split('/')[3]) || 2
-        },
+        redis: redisConfig,
         defaultJobOptions: this.jobOptions
       }));
 
