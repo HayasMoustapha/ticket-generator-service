@@ -131,7 +131,7 @@ class TicketGeneratorServer {
     });
 
     // Route 404
-    this.app.use('*', (req, res) => {
+    this.app.use((req, res) => {
       res.status(404).json({
         success: false,
         message: 'Route non trouvée',

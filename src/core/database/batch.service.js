@@ -9,6 +9,7 @@ const logger = require('../../utils/logger');
 class BatchService {
   constructor() {
     this.queues = new Map();
+    this.isInitialized = false;
     this.jobOptions = {
       removeOnComplete: parseInt(process.env.QUEUE_DEFAULT_JOB_OPTIONS_REMOVE_ON_COMPLETE) || 10,
       removeOnFail: 5,
@@ -19,13 +20,18 @@ class BatchService {
       }
     };
     
-    this.initializeQueues();
+    // Ne plus initialiser les queues immédiatement
+    // this.initializeQueues();
   }
 
   /**
-   * Initialise les queues Redis
+   * Initialise les queues Redis (appelé à la demande)
    */
-  initializeQueues() {
+  async initializeQueues() {
+    if (this.isInitialized) {
+      return;
+    }
+    
     try {
       const redisConfig = {
         host: process.env.REDIS_HOST || 'localhost',
@@ -69,6 +75,8 @@ class BatchService {
       logger.info('Batch queues initialized successfully', {
         queues: Array.from(this.queues.keys())
       });
+      
+      this.isInitialized = true;
     } catch (error) {
       logger.error('Failed to initialize batch queues', {
         error: error.message
