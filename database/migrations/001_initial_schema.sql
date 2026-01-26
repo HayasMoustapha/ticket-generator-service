@@ -77,8 +77,3 @@ CREATE INDEX IF NOT EXISTS idx_generated_tickets_event_id ON generated_tickets(e
 COMMENT ON TABLE ticket_generation_jobs IS 'Jobs de génération de tickets';
 COMMENT ON TABLE ticket_generation_logs IS 'Logs des opérations de génération';
 COMMENT ON TABLE generated_tickets IS 'Tickets générés avec tracking';
-
--- Insertion d'un job de test
-INSERT INTO ticket_generation_jobs (status, details, event_id, user_id, ticket_count, created_by) VALUES 
-('pending', '{"template": "standard", "format": "pdf"}', 1, 1, 1, 1)
-ON CONFLICT DO NOTHING;
