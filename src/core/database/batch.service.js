@@ -167,26 +167,32 @@ class BatchService {
 
       const queue = this.queues.get('ticket-generation');
       if (!queue) {
-        throw new Error('Ticket generation queue not available');
+        return {
+          success: false,
+          error: 'Ticket generation queue not available',
+          details: {
+            message: 'The ticket generation queue is not initialized',
+            queueName: 'ticket-generation'
+          }
+        };
       }
 
       const job = await queue.add('batch-ticket-generation', jobData, {
-        jobId,
-        priority: this.getPriorityValue(jobData.priority),
-        delay: options.delay || 0,
-        attempts: options.attempts || 3
-      });
-
-      logger.info('Batch ticket job created', {
-        jobId,
-        ticketsCount: tickets.length,
-        priority: jobData.priority
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000
+        }
       });
 
       return {
         success: true,
-        jobId,
-        job,
+        data: {
+          jobId: job.id,
+          queue: 'ticket-generation',
+          ticketCount: tickets.length
+        },
+        message: `Batch ticket generation job queued successfully`,
         ticketsCount: tickets.length,
         estimatedDuration: this.estimateBatchDuration(tickets.length)
       };
@@ -285,7 +291,14 @@ class BatchService {
 
       const queue = this.queues.get('batch-processing');
       if (!queue) {
-        throw new Error('Batch processing queue not available');
+        return {
+          success: false,
+          error: 'Batch processing queue not available',
+          details: {
+            message: 'The batch processing queue is not initialized',
+            queueName: 'batch-processing'
+          }
+        };
       }
 
       const job = await queue.add('full-batch-processing', jobData, {
