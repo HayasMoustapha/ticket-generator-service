@@ -17,14 +17,20 @@ class TicketsController {
    */
   async generateQRCode(req, res, next) {
     try {
+      console.log('🧪 [TEST LOG] TicketsController.generateQRCode - ENTRY');
+      console.log('🧪 [TEST LOG] TicketsController.generateQRCode - Request body:', req.body);
+      
       const { ticketCode, ticketId, eventId, format = 'base64', size = 'medium' } = req.body;
       
       // Validation des données
       if (!ticketCode || !ticketId) {
+        console.log('🧪 [TEST LOG] TicketsController.generateQRCode - VALIDATION ERROR: Missing ticketCode or ticketId');
         return res.status(400).json(
           errorResponse('Ticket code et ticket ID requis', null, 'INVALID_QR_DATA')
         );
       }
+
+      console.log('🧪 [TEST LOG] TicketsController.generateQRCode - Validation passed');
 
       // Préparer les données pour le service QR
       const qrData = {
@@ -42,15 +48,21 @@ class TicketsController {
         errorCorrection: 'M'
       };
 
+      console.log('🧪 [TEST LOG] TicketsController.generateQRCode - Calling qrCodeService.generateTicketQRCode...');
+      
       // Générer le QR code
       const qrResult = await qrCodeService.generateTicketQRCode(qrData, qrOptions);
       
+      console.log('🧪 [TEST LOG] TicketsController.generateQRCode - QR Result:', qrResult);
+      
       if (!qrResult.success) {
+        console.log(' [TEST LOG] TicketsController.generateQRCode - QR Generation failed:', qrResult.error);
         return res.status(500).json(
           errorResponse(qrResult.error, null, 'QR_GENERATION_FAILED')
         );
       }
 
+      console.log(' [TEST LOG] TicketsController.generateQRCode - SUCCESS PATH');
       logger.info('QR code generated successfully', {
         ticketId,
         ticketCode,
@@ -58,21 +70,18 @@ class TicketsController {
         size
       });
 
-      return res.status(201).json(
-        createdResponse('QR code généré avec succès', {
+      return res.status(200).json(
+        successResponse('QR code généré avec succès', {
+          qrCode: qrResult.data.qrCode,
           ticketId,
-          ticketCode,
-          qrCodeData: qrResult.qrCode,
-          checksum: qrResult.signature,
-          url: qrResult.url,
-          generatedAt: qrResult.generatedAt
+          format: qrResult.data.format,
+          size: qrResult.data.size
         })
       );
     } catch (error) {
-      logger.error('QR code generation failed', {
-        error: error.message,
-        stack: error.stack
-      });
+      console.log(' [TEST LOG] TicketsController.generateQRCode - ERROR PATH:', error.message);
+      console.log(' [TEST LOG] TicketsController.generateQRCode - ERROR STACK:', error.stack);
+      logger.error('Error generating QR code', { error: error.message, stack: error.stack });
       next(error);
     }
   }
