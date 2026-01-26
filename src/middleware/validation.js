@@ -19,9 +19,7 @@ const schemas = {
       eventId: Joi.string().required().messages({
         'any.required': 'L\'ID de l\'événement est requis'
       }),
-      userId: Joi.string().required().messages({
-        'any.required': 'L\'ID de l\'utilisateur est requis'
-      }),
+      // userId sera injecté par le middleware depuis le contexte
       type: Joi.string().optional().valid('standard', 'vip', 'premium', 'early-bird').messages({
         'any.only': 'Le type de ticket doit être l\'un des suivants: standard, vip, premium, early-bird'
       }),
@@ -56,7 +54,7 @@ const schemas = {
         }).optional()
       }).optional()
     }).optional()
-  }),
+  }).unknown(false),
 
   // Validation pour la génération en lot
   generateBatch: Joi.object({
@@ -64,7 +62,7 @@ const schemas = {
       Joi.object({
         id: Joi.string().required(),
         eventId: Joi.string().required(),
-        userId: Joi.string().required(),
+        // userId sera injecté par le middleware depuis le contexte
         type: Joi.string().optional().valid('standard', 'vip', 'premium', 'early-bird'),
         price: Joi.number().integer().min(0).optional(),
         createdAt: Joi.date().optional().iso()
@@ -95,14 +93,14 @@ const schemas = {
         }).optional()
       }).optional()
     }).optional()
-  }),
+  }).unknown(false),
 
   // Validation pour la génération PDF
   generatePDF: Joi.object({
     ticketData: Joi.object({
       id: Joi.string().required(),
       eventId: Joi.string().required(),
-      userId: Joi.string().required(),
+      // userId sera injecté par le middleware depuis le contexte
       type: Joi.string().optional(),
       price: Joi.number().integer().min(0).optional(),
       status: Joi.string().optional().valid('active', 'used', 'expired', 'cancelled', 'pending'),
@@ -156,7 +154,7 @@ const schemas = {
         })
       }).optional()
     }).optional()
-  }),
+  }).unknown(false),
 
   // Validation pour la génération PDF en lot
   generateBatchPDF: Joi.object({
@@ -164,7 +162,7 @@ const schemas = {
       Joi.object({
         id: Joi.string().required(),
         eventId: Joi.string().required(),
-        userId: Joi.string().required(),
+        // userId sera injecté par le middleware depuis le contexte
         type: Joi.string().optional(),
         price: Joi.number().integer().min(0).optional(),
         status: Joi.string().optional().valid('active', 'used', 'expired', 'cancelled', 'pending')
@@ -196,7 +194,7 @@ const schemas = {
         fontSize: Joi.number().integer().min(8).max(24).optional()
       }).optional()
     }).optional()
-  }),
+  }).unknown(false),
 
   // Validation pour le traitement batch complet
   generateFullBatch: Joi.object({
@@ -204,7 +202,7 @@ const schemas = {
       Joi.object({
         id: Joi.string().required(),
         eventId: Joi.string().required(),
-        userId: Joi.string().required(),
+        // userId sera injecté par le middleware depuis le contexte
         type: Joi.string().optional(),
         price: Joi.number().integer().min(0).optional(),
         status: Joi.string().optional().valid('active', 'used', 'expired', 'cancelled', 'pending')
@@ -244,7 +242,7 @@ const schemas = {
         fontSize: Joi.number().integer().min(8).max(24).optional()
       }).optional()
     }).optional()
-  })
+  }).unknown(false)
 };
 
 /**
@@ -256,11 +254,14 @@ function validate(schema, source = 'body') {
   return (req, res, next) => {
     const data = req[source];
     
-    const { error, value } = schema.validate(data, {
+    // Permettre les champs injectés par le contexte
+    const options = {
       abortEarly: false,
-      allowUnknown: false,
-      stripUnknown: true
-    });
+      allowUnknown: true, // Permettre les champs injectés par le contexte
+      stripUnknown: false // Ne pas supprimer les champs injectés
+    };
+
+    const { error, value } = schema.validate(data, options);
 
     if (error) {
       const errors = error.details.map(detail => ({
@@ -281,8 +282,8 @@ function validate(schema, source = 'body') {
       );
     }
 
-    // Remplacer les données validées dans la requête
-    req[source] = value;
+    // Fusionner les données validées avec les données existantes
+    req[source] = { ...req[source], ...value };
     
     logger.validation('Validation passed', {
       source,
