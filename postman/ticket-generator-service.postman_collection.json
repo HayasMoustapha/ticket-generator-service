@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Ticket Generator Service API",
-    "description": "API collection for Ticket Generator Service with centralized security and validation",
-    "version": "2.0.0",
+    "name": "Ticket Generator Service API - COMPLETE",
+    "description": "Complete API collection for Ticket Generator Service with all 20 routes implemented",
+    "version": "3.0.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -10,7 +10,7 @@
     "bearer": [
       {
         "key": "token",
-        "value": "{{auth_token}}",
+        "value": "{{authToken}}",
         "type": "string"
       }
     ]
@@ -18,12 +18,12 @@
   "variable": [
     {
       "key": "base_url",
-      "value": "http://localhost:3004",
+      "value": "{{baseUrl}}",
       "type": "string"
     },
     {
       "key": "auth_token",
-      "value": "your_jwt_token_here",
+      "value": "{{authToken}}",
       "type": "string"
     }
   ],
@@ -43,7 +43,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ticketCode\": \"TICKET_123456\",\n  \"ticketId\": \"{{ticket_id}}\",\n  \"eventId\": \"{{event_id}}\",\n  \"format\": \"base64\",\n  \"size\": \"medium\"\n}"
+              "raw": "{\n  \"ticketCode\": \"TICKET_123456\",\n  \"ticketId\": \"{{testTicketId}}\",\n  \"eventId\": \"{{testEventId}}\",\n  \"format\": \"base64\",\n  \"size\": \"medium\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/tickets/qr/generate",
@@ -60,9 +60,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/tickets/{{ticket_id}}/qr",
+              "raw": "{{base_url}}/api/tickets/{{testTicketId}}/qr",
               "host": ["{{base_url}}"],
-              "path": ["api", "tickets", "{{ticket_id}}", "qr"]
+              "path": ["api", "tickets", "{{testTicketId}}", "qr"]
             },
             "description": "Get QR code for a specific ticket (requires tickets.read permission)"
           },
@@ -85,7 +85,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"eventId\": \"{{event_id}}\",\n  \"ticketType\": \"standard\",\n  \"attendeeInfo\": {\n    \"name\": \"John Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"phone\": \"+33612345678\",\n    \"address\": {\n      \"street\": \"123 Main St\",\n      \"city\": \"Paris\",\n      \"country\": \"France\",\n      \"postalCode\": \"75001\"\n    }\n  },\n  \"ticketOptions\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true,\n    \"includeLogo\": false,\n    \"customFields\": {\n      \"seatNumber\": \"A12\",\n      \"gate\": \"Main Entrance\"\n    }\n  }\n}"
+              "raw": "{\n  \"eventId\": \"{{testEventId}}\",\n  \"ticketType\": \"standard\",\n  \"attendeeInfo\": {\n    \"name\": \"John Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"phone\": \"+33612345678\",\n    \"address\": {\n      \"street\": \"123 Main St\",\n      \"city\": \"Paris\",\n      \"country\": \"France\",\n      \"postalCode\": \"75001\"\n    }\n  },\n  \"ticketOptions\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true,\n    \"includeLogo\": false,\n    \"customFields\": {\n      \"seatNumber\": \"A12\",\n      \"gate\": \"Main Entrance\"\n    }\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/tickets/generate",
@@ -108,7 +108,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tickets\": [\n    {\n      \"eventId\": \"{{event_id}}\",\n      \"ticketType\": \"standard\",\n      \"attendeeInfo\": {\n        \"name\": \"John Doe\",\n        \"email\": \"john.doe@example.com\",\n        \"phone\": \"+33612345678\"\n      }\n    },\n    {\n      \"eventId\": \"{{event_id}}\",\n      \"ticketType\": \"vip\",\n      \"attendeeInfo\": {\n        \"name\": \"Jane Smith\",\n        \"email\": \"jane.smith@example.com\",\n        \"phone\": \"+33687654321\"\n      }\n    }\n  ],\n  \"batchOptions\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true,\n    \"includeLogo\": false,\n    \"parallelGeneration\": true\n  }\n}"
+              "raw": "{\n  \"eventId\": \"{{testEventId}}\",\n  \"tickets\": [\n    {\n      \"ticketType\": \"standard\",\n      \"attendeeInfo\": {\n        \"name\": \"John Doe\",\n        \"email\": \"john.doe@example.com\",\n        \"phone\": \"+33612345678\"\n      }\n    },\n    {\n      \"ticketType\": \"vip\",\n      \"attendeeInfo\": {\n        \"name\": \"Jane Smith\",\n        \"email\": \"jane.smith@example.com\",\n        \"phone\": \"+33698765432\"\n      }\n    }\n  ],\n  \"ticketOptions\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/tickets/batch",
@@ -116,6 +116,106 @@
               "path": ["api", "tickets", "batch"]
             },
             "description": "Generate tickets in batch (requires tickets.batch.create permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Validate Ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketId\": \"{{testTicketId}}\",\n  \"validationCode\": \"VALID_123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tickets/validate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets", "validate"]
+            },
+            "description": "Validate a ticket (requires tickets.validate permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Ticket Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tickets/{{testTicketId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets", "{{testTicketId}}"]
+            },
+            "description": "Get ticket details by ID (requires tickets.read permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Event Tickets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tickets/event/{{testEventId}}?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets", "event", "{{testEventId}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Items per page"
+                }
+              ]
+            },
+            "description": "Get tickets for an event (requires tickets.read permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Regenerate Ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Damaged ticket replacement\",\n  \"regenerateOptions\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tickets/{{testTicketId}}/regenerate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets", "{{testTicketId}}", "regenerate"]
+            },
+            "description": "Regenerate a ticket (requires tickets.update permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Ticket",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tickets/{{testTicketId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets", "{{testTicketId}}"]
+            },
+            "description": "Delete a ticket (requires tickets.delete permission)"
           },
           "response": []
         }
@@ -136,7 +236,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ticketId\": \"{{ticket_id}}\",\n  \"templateId\": \"standard_template\",\n  \"customFields\": {\n    \"eventName\": \"Tech Conference 2024\",\n    \"eventDate\": \"2024-06-15\",\n    \"eventLocation\": \"Paris, France\",\n    \"attendeeName\": \"John Doe\",\n    \"ticketType\": \"Standard\"\n  },\n  \"pdfOptions\": {\n    \"format\": \"A4\",\n    \"orientation\": \"portrait\",\n    \"includeWatermark\": false,\n    \"customTemplate\": false\n  }\n}"
+              "raw": "{\n  \"ticketId\": \"{{testTicketId}}\",\n  \"templateId\": \"{{testTemplateId}}\",\n  \"options\": {\n    \"format\": \"base64\",\n    \"includeQR\": true,\n    \"includeLogo\": false,\n    \"customFields\": {\n      \"seatNumber\": \"A12\",\n      \"gate\": \"Main Entrance\"\n    }\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/tickets/pdf",
@@ -148,7 +248,7 @@
           "response": []
         },
         {
-          "name": "Generate Batch PDF",
+          "name": "Generate Batch PDFs",
           "request": {
             "method": "POST",
             "header": [
@@ -159,7 +259,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ticketIds\": [\"{{ticket_id_1}}\", \"{{ticket_id_2}}\", \"{{ticket_id_3}}\"],\n  \"templateId\": \"standard_template\",\n  \"batchOptions\": {\n    \"format\": \"A4\",\n    \"orientation\": \"portrait\",\n    \"includeWatermark\": false,\n    \"parallelGeneration\": true\n  }\n}"
+              "raw": "{\n  \"ticketIds\": [\"{{testTicketId}}_1\", \"{{testTicketId}}_2\"],\n  \"templateId\": \"{{testTemplateId}}\",\n  \"options\": {\n    \"format\": \"base64\",\n    \"includeQR\": true,\n    \"includeLogo\": false\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/tickets/batch-pdf",
@@ -176,9 +276,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/tickets/{{ticket_id}}/pdf",
+              "raw": "{{base_url}}/api/tickets/{{testTicketId}}/pdf",
               "host": ["{{base_url}}"],
-              "path": ["api", "tickets", "{{ticket_id}}", "pdf"]
+              "path": ["api", "tickets", "{{testTicketId}}", "pdf"]
             },
             "description": "Get PDF for a specific ticket (requires tickets.read permission)"
           },
@@ -187,10 +287,10 @@
       ]
     },
     {
-      "name": "Ticket Validation",
+      "name": "Job Management",
       "item": [
         {
-          "name": "Validate Ticket",
+          "name": "Create Job",
           "request": {
             "method": "POST",
             "header": [
@@ -201,45 +301,77 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ticketCode\": \"TICKET_123456\",\n  \"ticketId\": \"{{ticket_id}}\",\n  \"eventId\": \"{{event_id}}\"\n}"
+              "raw": "{\n  \"jobType\": \"batch_generation\",\n  \"parameters\": {\n    \"eventId\": \"{{testEventId}}\",\n    \"ticketCount\": 100,\n    \"ticketType\": \"standard\"\n  },\n  \"priority\": \"normal\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/tickets/validate",
+              "raw": "{{base_url}}/api/tickets/jobs",
               "host": ["{{base_url}}"],
-              "path": ["api", "tickets", "validate"]
+              "path": ["api", "tickets", "jobs"]
             },
-            "description": "Validate a ticket (requires tickets.validate permission)"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Ticket Management",
-      "item": [
-        {
-          "name": "Get Ticket Details",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/tickets/{{ticket_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "tickets", "{{ticket_id}}"]
-            },
-            "description": "Get ticket details by ID (requires tickets.read permission)"
+            "description": "Create a ticket generation job (requires tickets.jobs.create permission)"
           },
           "response": []
         },
         {
-          "name": "Get Event Tickets",
+          "name": "Get Job Status",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/tickets/event/{{event_id}}?page=1&limit=20&status=generated",
+              "raw": "{{base_url}}/api/tickets/job/{{testJobId}}/status",
               "host": ["{{base_url}}"],
-              "path": ["api", "tickets", "event", "{{event_id}}"],
+              "path": ["api", "tickets", "job", "{{testJobId}}", "status"]
+            },
+            "description": "Get job status (requires tickets.jobs.read permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Process Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": \"high\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tickets/jobs/{{testJobId}}/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets", "jobs", "{{testJobId}}", "process"]
+            },
+            "description": "Process a specific job (requires tickets.jobs.process permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Job",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tickets/job/{{testJobId}}/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets", "job", "{{testJobId}}", "cancel"]
+            },
+            "description": "Cancel a job (requires tickets.jobs.cancel permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "List Jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tickets/jobs?page=1&limit=20&status=pending",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets", "jobs"],
               "query": [
                 {
                   "key": "page",
@@ -253,49 +385,45 @@
                 },
                 {
                   "key": "status",
-                  "value": "generated",
-                  "description": "Filter by status (pending, generated, used, expired)"
+                  "value": "pending",
+                  "description": "Filter by status"
                 }
               ]
             },
-            "description": "Get tickets for a specific event (requires tickets.read permission)"
+            "description": "List jobs with filters (requires tickets.jobs.read permission)"
           },
           "response": []
-        },
+        }
+      ]
+    },
+    {
+      "name": "Statistics & Monitoring",
+      "item": [
         {
-          "name": "Regenerate Ticket",
+          "name": "Get Queue Statistics",
           "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reason\": \"Customer request for updated ticket\",\n  \"regenerateQR\": true,\n  \"regeneratePDF\": true\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/tickets/{{ticket_id}}/regenerate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "tickets", "{{ticket_id}}", "regenerate"]
-            },
-            "description": "Regenerate a ticket (requires tickets.update permission)"
-          },
-          "response": []
-        },
-        {
-          "name": "Delete Ticket",
-          "request": {
-            "method": "DELETE",
+            "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/tickets/{{ticket_id}}",
+              "raw": "{{base_url}}/api/tickets/queue/stats",
               "host": ["{{base_url}}"],
-              "path": ["api", "tickets", "{{ticket_id}}"]
+              "path": ["api", "tickets", "queue", "stats"]
             },
-            "description": "Delete a ticket (requires tickets.delete permission)"
+            "description": "Get queue processing statistics (requires tickets.stats.read permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Event Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tickets/events/{{testEventId}}/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets", "events", "{{testEventId}}", "stats"]
+            },
+            "description": "Get ticket statistics for an event (requires tickets.stats.read permission)"
           },
           "response": []
         }
@@ -317,6 +445,20 @@
             "description": "Basic health check (no authentication required)"
           },
           "response": []
+        },
+        {
+          "name": "API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tickets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tickets"]
+            },
+            "description": "Get API information (no authentication required)"
+          },
+          "response": []
         }
       ]
     }
@@ -326,9 +468,9 @@
       "listen": "prerequest",
       "script": {
         "exec": [
-          "// Auto-refresh token if needed",
-          "if (pm.collectionVariables.get('auth_token') === 'your_jwt_token_here') {",
-          "    pm.collectionVariables.set('auth_token', 'your_real_jwt_token');",
+          "// Auto-refresh token if expired",
+          "if (pm.collectionVariables.get('authToken') === 'your_jwt_token_here') {",
+          "    pm.collectionVariables.set('authToken', 'your_real_jwt_token');",
           "}"
         ],
         "type": "text/javascript"
