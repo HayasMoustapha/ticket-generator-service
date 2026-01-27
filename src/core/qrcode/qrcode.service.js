@@ -440,6 +440,124 @@ class QRCodeService {
     this.defaultOptions = { ...this.defaultOptions, ...newOptions };
     logger.info('QR code default options updated', { options: this.defaultOptions });
   }
+
+  /**
+   * Récupère un QR code de ticket
+   * @param {string} ticketId - ID du ticket
+   * @returns {Promise<Object>} QR code du ticket
+   */
+  async getTicketQRCode(ticketId) {
+    try {
+      // Logique pour récupérer le QR code depuis la base de données ou cache
+      const qrData = await this.getQRCodeFromDatabase(ticketId);
+      
+      if (!qrData) {
+        return {
+          success: false,
+          error: 'QR code non trouvé pour ce ticket'
+        };
+      }
+      
+      return {
+        success: true,
+        data: qrData
+      };
+    } catch (error) {
+      logger.error('Error getting ticket QR code:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Valide un ticket
+   * @param {string} ticketCode - Code du ticket
+   * @param {string} ticketId - ID du ticket
+   * @param {string} eventId - ID de l'événement
+   * @returns {Promise<Object>} Résultat de la validation
+   */
+  async validateTicket(ticketCode, ticketId, eventId) {
+    try {
+      // Logique de validation du ticket
+      const validationResult = await this.validateTicketData(ticketCode, ticketId, eventId);
+      
+      if (!validationResult.isValid) {
+        return {
+          success: false,
+          error: validationResult.error || 'Ticket invalide'
+        };
+      }
+      
+      return {
+        success: true,
+        data: {
+          ticketId,
+          eventId,
+          isValid: true,
+          validationTime: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      logger.error('Error validating ticket:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Récupère le QR code depuis la base de données
+   * @param {string} ticketId - ID du ticket
+   * @returns {Promise<Object|null>} Données du QR code
+   */
+  async getQRCodeFromDatabase(ticketId) {
+    try {
+      // Implémentation de la récupération depuis la base de données
+      // Pour l'instant, retourne des données mockées
+      return {
+        ticketId,
+        qrCode: 'mock_qr_code_data',
+        format: 'base64',
+        generatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      logger.error('Error getting QR code from database:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Valide les données du ticket
+   * @param {string} ticketCode - Code du ticket
+   * @param {string} ticketId - ID du ticket
+   * @param {string} eventId - ID de l'événement
+   * @returns {Promise<Object>} Résultat de la validation
+   */
+  async validateTicketData(ticketCode, ticketId, eventId) {
+    try {
+      // Implémentation de la validation
+      // Pour l'instant, validation simple
+      if (!ticketCode || !ticketId) {
+        return {
+          isValid: false,
+          error: 'Code ou ID du ticket manquant'
+        };
+      }
+      
+      return {
+        isValid: true
+      };
+    } catch (error) {
+      logger.error('Error validating ticket data:', error);
+      return {
+        isValid: false,
+        error: error.message
+      };
+    }
+  }
 }
 
 module.exports = new QRCodeService();

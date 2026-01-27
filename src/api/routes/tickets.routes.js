@@ -1,193 +1,207 @@
 const express = require('express');
+const Joi = require('joi');
 const router = express.Router();
 const ticketsController = require('../controllers/tickets.controller');
-const { authenticate, requirePermission } = require('../../../../shared');
-const { validate, schemas } = require('../../middleware/validation');
-const { injectUserContext } = require('../../../../shared/context-middleware');
+const { SecurityMiddleware, ValidationMiddleware, ContextInjector } = require('../../../../shared');
+const ticketGeneratorErrorHandler = require('../../error/ticket-generator.errorHandler');
 
 /**
  * Routes pour la génération de tickets
  */
 
-// Middleware d'authentification pour toutes les routes
-router.use(authenticate);
+// Apply authentication to all routes
+router.use(SecurityMiddleware.authenticated());
+
+// Apply context injection for all authenticated routes
+router.use(ContextInjector.injectUserContext());
+
+// Apply error handler for all routes
+router.use(ticketGeneratorErrorHandler);
+
+// Validation schemas
+const generateQRCodeSchema = Joi.object({
+  ticketCode: Joi.string().required(),
+  ticketId: Joi.string().required(),
+  eventId: Joi.string().optional(),
+  format: Joi.string().valid('base64', 'png', 'svg', 'pdf').default('base64'),
+  size: Joi.string().valid('small', 'medium', 'large').default('medium')
+});
+
+const generateTicketSchema = Joi.object({
+  eventId: Joi.string().required(),
+  ticketType: Joi.string().valid('standard', 'vip', 'premium', 'staff').required(),
+  attendeeInfo: Joi.object({
+    name: Joi.string().required(),
+    email: Joi.string().email().required(),
+    phone: Joi.string().optional(),
+    address: Joi.object().optional()
+  }).required(),
+  ticketOptions: Joi.object({
+    qrFormat: Joi.string().valid('base64', 'png', 'svg').default('base64'),
+    qrSize: Joi.string().valid('small', 'medium', 'large').default('medium'),
+    pdfFormat: Joi.boolean().default(true),
+    includeLogo: Joi.boolean().default(false),
+    customFields: Joi.object().optional()
+  }).optional()
+});
+
+const generateBatchSchema = Joi.object({
+  tickets: Joi.array().items(
+    Joi.object({
+      eventId: Joi.string().required(),
+      ticketType: Joi.string().valid('standard', 'vip', 'premium', 'staff').required(),
+      attendeeInfo: Joi.object({
+        name: Joi.string().required(),
+        email: Joi.string().email().required(),
+        phone: Joi.string().optional(),
+        address: Joi.object().optional()
+      }).required()
+    })
+  ).min(1).max(100).required(),
+  batchOptions: Joi.object({
+    qrFormat: Joi.string().valid('base64', 'png', 'svg').default('base64'),
+    qrSize: Joi.string().valid('small', 'medium', 'large').default('medium'),
+    pdfFormat: Joi.boolean().default(true),
+    includeLogo: Joi.boolean().default(false),
+    parallelGeneration: Joi.boolean().default(true)
+  }).optional()
+});
+
+const generatePDFSchema = Joi.object({
+  ticketId: Joi.string().required(),
+  templateId: Joi.string().optional(),
+  customFields: Joi.object().optional(),
+  pdfOptions: Joi.object({
+    format: Joi.string().valid('A4', 'A5', 'letter').default('A4'),
+    orientation: Joi.string().valid('portrait', 'landscape').default('portrait'),
+    includeWatermark: Joi.boolean().default(false),
+    customTemplate: Joi.boolean().default(false)
+  }).optional()
+});
+
+const generateBatchPDFSchema = Joi.object({
+  ticketIds: Joi.array().items(Joi.string()).min(1).max(50).required(),
+  templateId: Joi.string().optional(),
+  batchOptions: Joi.object({
+    format: Joi.string().valid('A4', 'A5', 'letter').default('A4'),
+    orientation: Joi.string().valid('portrait', 'landscape').default('portrait'),
+    includeWatermark: Joi.boolean().default(false),
+    parallelGeneration: Joi.boolean().default(true)
+  }).optional()
+});
+
+const validateTicketSchema = Joi.object({
+  ticketCode: Joi.string().required(),
+  ticketId: Joi.string().required(),
+  eventId: Joi.string().optional()
+});
 
 // POST /api/tickets/qr/generate - Générer un QR code pour un ticket
 router.post('/qr/generate',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.create'),
+  SecurityMiddleware.withPermissions('tickets.create'),
+  ValidationMiddleware.validate({ body: generateQRCodeSchema }),
   ticketsController.generateQRCode
 );
 
 // POST /api/tickets/generate - Générer un ticket unique
 router.post('/generate',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.create'),
-  validate(schemas.generateTicket, 'body'),
+  SecurityMiddleware.withPermissions('tickets.create'),
+  ValidationMiddleware.validate({ body: generateTicketSchema }),
   ticketsController.generateTicket
 );
 
 // POST /api/tickets/batch - Générer des tickets en lot
 router.post('/batch',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.batch.create'),
-  validate(schemas.generateBatch, 'body'),
+  SecurityMiddleware.withPermissions('tickets.batch.create'),
+  ValidationMiddleware.validate({ body: generateBatchSchema }),
   ticketsController.generateBatch
 );
 
 // POST /api/tickets/pdf - Générer un PDF pour un ticket
 router.post('/pdf',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.pdf.create'),
-  validate(schemas.generatePDF, 'body'),
+  SecurityMiddleware.withPermissions('tickets.pdf.create'),
+  ValidationMiddleware.validate({ body: generatePDFSchema }),
   ticketsController.generatePDF
 );
 
 // POST /api/tickets/batch-pdf - Générer des PDFs en lot
 router.post('/batch-pdf',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.pdf.batch'),
-  validate(schemas.generateBatchPDF, 'body'),
+  SecurityMiddleware.withPermissions('tickets.batch.create'),
+  ValidationMiddleware.validate({ body: generateBatchPDFSchema }),
   ticketsController.generateBatchPDF
 );
 
-// POST /api/tickets/full-batch - Générer un traitement batch complet
-router.post('/full-batch',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.full.batch'),
-  validate(schemas.generateFullBatch, 'body'),
-  ticketsController.generateFullBatch
+// GET /api/tickets/:ticketId/qr - Obtenir le QR code d'un ticket
+router.get('/:ticketId/qr',
+  SecurityMiddleware.withPermissions('tickets.read'),
+  ValidationMiddleware.validateParams({
+    ticketId: Joi.string().required()
+  }),
+  ticketsController.getTicketQRCode
 );
 
-// GET /api/tickets/job/:jobId/status - Récupérer le statut d'un job
-router.get('/job/:jobId/status',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.read'),
-  ticketsController.getJobStatus
+// GET /api/tickets/:ticketId/pdf - Obtenir le PDF d'un ticket
+router.get('/:ticketId/pdf',
+  SecurityMiddleware.withPermissions('tickets.read'),
+  ValidationMiddleware.validateParams({
+    ticketId: Joi.string().required()
+  }),
+  ticketsController.getTicketPDF
 );
 
-// DELETE /api/tickets/job/:jobId/cancel - Annuler un job
-router.delete('/job/:jobId/cancel',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.cancel'),
-  ticketsController.cancelJob
+// POST /api/tickets/validate - Valider un ticket
+router.post('/validate',
+  SecurityMiddleware.withPermissions('tickets.validate'),
+  ValidationMiddleware.validate({ body: validateTicketSchema }),
+  ticketsController.validateTicket
 );
 
-// GET /api/tickets/:ticketId/download - Télécharger un ticket au format PDF
-router.get('/:ticketId/download',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.read'),
-  ticketsController.downloadTicket
+// GET /api/tickets/:ticketId - Obtenir les détails d'un ticket
+router.get('/:ticketId',
+  SecurityMiddleware.withPermissions('tickets.read'),
+  ValidationMiddleware.validateParams({
+    ticketId: Joi.string().required()
+  }),
+  ticketsController.getTicketDetails
 );
 
-// GET /api/tickets/:ticketId/qrcode - Télécharger le QR code d'un ticket
-router.get('/:ticketId/qrcode',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.read'),
-  ticketsController.downloadQRCode
-);
-
-// GET /api/tickets/queue/stats - Récupérer les statistiques des queues
-router.get('/queue/stats',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.stats.read'),
-  ticketsController.getQueueStats
-);
-
-// POST /api/tickets/queue/clean - Nettoyer les jobs terminés
-router.post('/queue/clean',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.admin'),
-  ticketsController.cleanCompletedJobs
-);
-
-// Routes supplémentaires pour correspondre à Postman
-
-// POST /api/tickets/jobs - Créer un job de génération
-router.post('/jobs',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.create'),
-  validate(schemas.createJob, 'body'),
-  ticketsController.createJob
-);
-
-// POST /api/tickets/jobs/:jobId/process - Traiter un job spécifique
-router.post('/jobs/:jobId/process',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.process'),
-  ticketsController.processJob
-);
-
-// GET /api/tickets/jobs - Lister les jobs
-router.get('/jobs',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.read'),
-  ticketsController.listJobs
-);
-
-// GET /api/tickets/events/:eventId/tickets - Récupérer les tickets d'un événement
-router.get('/events/:eventId/tickets',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.read'),
+// GET /api/tickets/event/:eventId - Obtenir les tickets d'un événement
+router.get('/event/:eventId',
+  SecurityMiddleware.withPermissions('tickets.read'),
+  ValidationMiddleware.validateParams({
+    eventId: Joi.string().required()
+  }),
+  ValidationMiddleware.validateQuery({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(20),
+    status: Joi.string().valid('pending', 'generated', 'used', 'expired').optional()
+  }),
   ticketsController.getEventTickets
 );
 
-// GET /api/tickets/events/:eventId/stats - Statistiques de tickets d'un événement
-router.get('/events/:eventId/stats',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.stats.read'),
-  ticketsController.getEventTicketStats
+// POST /api/tickets/:ticketId/regenerate - Régénérer un ticket
+router.post('/:ticketId/regenerate',
+  SecurityMiddleware.withPermissions('tickets.update'),
+  ValidationMiddleware.validateParams({
+    ticketId: Joi.string().required()
+  }),
+  ValidationMiddleware.validate({
+    body: Joi.object({
+      reason: Joi.string().optional(),
+      regenerateQR: Joi.boolean().default(true),
+      regeneratePDF: Joi.boolean().default(true)
+    })
+  }),
+  ticketsController.regenerateTicket
 );
 
-// Health check routes
-router.get('/health',
-  ticketsController.healthCheck
+// DELETE /api/tickets/:ticketId - Supprimer un ticket
+router.delete('/:ticketId',
+  SecurityMiddleware.withPermissions('tickets.delete'),
+  ValidationMiddleware.validateParams({
+    ticketId: Joi.string().required()
+  }),
+  ticketsController.deleteTicket
 );
-
-router.get('/',
-  (req, res) => {
-    res.json({
-      service: 'Ticket Generator API',
-      version: '1.0.0',
-      status: 'running',
-      endpoints: {
-        generate: 'POST /api/tickets/generate',
-        qrGenerate: 'POST /api/tickets/qr/generate',
-        batch: 'POST /api/tickets/batch',
-        pdf: 'POST /api/tickets/pdf',
-        batchPdf: 'POST /api/tickets/batch-pdf',
-        fullBatch: 'POST /api/tickets/full-batch',
-        jobStatus: 'GET /api/tickets/job/:jobId/status',
-        cancelJob: 'DELETE /api/tickets/job/:jobId/cancel',
-        createJob: 'POST /api/tickets/jobs',
-        processJob: 'POST /api/tickets/jobs/:jobId/process',
-        listJobs: 'GET /api/tickets/jobs',
-        download: 'GET /api/tickets/:ticketId/download',
-        qrcode: 'GET /api/tickets/:ticketId/qrcode',
-        queueStats: 'GET /api/tickets/queue/stats',
-        queueClean: 'POST /api/tickets/queue/clean',
-        eventTickets: 'GET /api/tickets/events/:eventId/tickets',
-        eventStats: 'GET /api/tickets/events/:eventId/stats'
-      },
-      timestamp: new Date().toISOString()
-    });
-  });
 
 module.exports = router;

@@ -703,6 +703,174 @@ class BatchService {
       });
     }
   }
+
+  /**
+   * Récupère les détails d'un ticket
+   * @param {string} ticketId - ID du ticket
+   * @returns {Promise<Object>} Détails du ticket
+   */
+  async getTicketDetails(ticketId) {
+    try {
+      // Logique pour récupérer les détails du ticket depuis la base de données
+      const ticketDetails = await this.getTicketDetailsFromDatabase(ticketId);
+      
+      if (!ticketDetails) {
+        return {
+          success: false,
+          error: 'Ticket non trouvé'
+        };
+      }
+      
+      return {
+        success: true,
+        data: ticketDetails
+      };
+    } catch (error) {
+      logger.error('Error getting ticket details:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Régénère un ticket
+   * @param {string} ticketId - ID du ticket
+   * @param {Object} options - Options de régénération
+   * @returns {Promise<Object>} Résultat de la régénération
+   */
+  async regenerateTicket(ticketId, options = {}) {
+    try {
+      // Logique pour régénérer le ticket
+      const regenerateResult = await this.regenerateTicketInDatabase(ticketId, options);
+      
+      if (!regenerateResult.success) {
+        return {
+          success: false,
+          error: regenerateResult.error
+        };
+      }
+      
+      return {
+        success: true,
+        data: regenerateResult.data
+      };
+    } catch (error) {
+      logger.error('Error regenerating ticket:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Supprime un ticket
+   * @param {string} ticketId - ID du ticket
+   * @returns {Promise<Object>} Résultat de la suppression
+   */
+  async deleteTicket(ticketId) {
+    try {
+      // Logique pour supprimer le ticket de la base de données
+      const deleteResult = await this.deleteTicketFromDatabase(ticketId);
+      
+      if (!deleteResult.success) {
+        return {
+          success: false,
+          error: deleteResult.error
+        };
+      }
+      
+      return {
+        success: true,
+        data: deleteResult.data
+      };
+    } catch (error) {
+      logger.error('Error deleting ticket:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Récupère les détails du ticket depuis la base de données
+   * @param {string} ticketId - ID du ticket
+   * @returns {Promise<Object|null>} Détails du ticket
+   */
+  async getTicketDetailsFromDatabase(ticketId) {
+    try {
+      // Implémentation de la récupération depuis la base de données
+      // Pour l'instant, retourne des données mockées
+      return {
+        ticketId,
+        eventId: 'mock_event_id',
+        ticketType: 'standard',
+        status: 'generated',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      logger.error('Error getting ticket details from database:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Régénère le ticket dans la base de données
+   * @param {string} ticketId - ID du ticket
+   * @param {Object} options - Options de régénération
+   * @returns {Promise<Object>} Résultat de la régénération
+   */
+  async regenerateTicketInDatabase(ticketId, options = {}) {
+    try {
+      // Implémentation de la régénération dans la base de données
+      // Pour l'instant, retourne des données mockées
+      return {
+        success: true,
+        data: {
+          ticketId,
+          regeneratedAt: new Date().toISOString(),
+          reason: options.reason || 'Manual regeneration',
+          regenerateQR: options.regenerateQR,
+          regeneratePDF: options.regeneratePDF
+        }
+      };
+    } catch (error) {
+      logger.error('Error regenerating ticket in database:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Supprime le ticket de la base de données
+   * @param {string} ticketId - ID du ticket
+   * @returns {Promise<Object>} Résultat de la suppression
+   */
+  async deleteTicketFromDatabase(ticketId) {
+    try {
+      // Implémentation de la suppression dans la base de données
+      // Pour l'instant, retourne des données mockées
+      return {
+        success: true,
+        data: {
+          ticketId,
+          deletedAt: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      logger.error('Error deleting ticket from database:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
 }
 
 module.exports = new BatchService();

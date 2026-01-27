@@ -863,6 +863,161 @@ class TicketsController {
       next(error);
     }
   }
+
+  /**
+   * Obtenir le QR code d'un ticket
+   */
+  async getTicketQRCode(req, res, next) {
+    try {
+      const { ticketId } = req.params;
+      
+      // Logique pour récupérer le QR code du ticket
+      const qrResult = await qrCodeService.getTicketQRCode(ticketId);
+      
+      if (!qrResult.success) {
+        return res.status(404).json(
+          errorResponse('QR code non trouvé', null, 'QR_CODE_NOT_FOUND')
+        );
+      }
+      
+      return res.status(200).json(
+        successResponse('QR code récupéré avec succès', qrResult.data)
+      );
+    } catch (error) {
+      logger.error('Error getting ticket QR code:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Obtenir le PDF d'un ticket
+   */
+  async getTicketPDF(req, res, next) {
+    try {
+      const { ticketId } = req.params;
+      
+      // Logique pour récupérer le PDF du ticket
+      const pdfResult = await pdfService.getTicketPDF(ticketId);
+      
+      if (!pdfResult.success) {
+        return res.status(404).json(
+          errorResponse('PDF non trouvé', null, 'PDF_NOT_FOUND')
+        );
+      }
+      
+      return res.status(200).json(
+        successResponse('PDF récupéré avec succès', pdfResult.data)
+      );
+    } catch (error) {
+      logger.error('Error getting ticket PDF:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Valider un ticket
+   */
+  async validateTicket(req, res, next) {
+    try {
+      const { ticketCode, ticketId, eventId } = req.body;
+      
+      // Logique de validation du ticket
+      const validationResult = await qrCodeService.validateTicket(ticketCode, ticketId, eventId);
+      
+      if (!validationResult.success) {
+        return res.status(400).json(
+          errorResponse('Ticket invalide', validationResult.error, 'TICKET_INVALID')
+        );
+      }
+      
+      return res.status(200).json(
+        successResponse('Ticket validé avec succès', validationResult.data)
+      );
+    } catch (error) {
+      logger.error('Error validating ticket:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Obtenir les détails d'un ticket
+   */
+  async getTicketDetails(req, res, next) {
+    try {
+      const { ticketId } = req.params;
+      
+      // Logique pour récupérer les détails du ticket
+      const ticketDetails = await batchService.getTicketDetails(ticketId);
+      
+      if (!ticketDetails.success) {
+        return res.status(404).json(
+          errorResponse('Ticket non trouvé', null, 'TICKET_NOT_FOUND')
+        );
+      }
+      
+      return res.status(200).json(
+        successResponse('Détails du ticket récupérés avec succès', ticketDetails.data)
+      );
+    } catch (error) {
+      logger.error('Error getting ticket details:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Régénérer un ticket
+   */
+  async regenerateTicket(req, res, next) {
+    try {
+      const { ticketId } = req.params;
+      const { reason, regenerateQR = true, regeneratePDF = true } = req.body;
+      
+      // Logique pour régénérer le ticket
+      const regenerateResult = await batchService.regenerateTicket(ticketId, {
+        reason,
+        regenerateQR,
+        regeneratePDF
+      });
+      
+      if (!regenerateResult.success) {
+        return res.status(500).json(
+          errorResponse('Échec de régénération du ticket', regenerateResult.error, 'TICKET_REGENERATION_FAILED')
+        );
+      }
+      
+      return res.status(200).json(
+        successResponse('Ticket régénéré avec succès', regenerateResult.data)
+      );
+    } catch (error) {
+      logger.error('Error regenerating ticket:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Supprimer un ticket
+   */
+  async deleteTicket(req, res, next) {
+    try {
+      const { ticketId } = req.params;
+      
+      // Logique pour supprimer le ticket
+      const deleteResult = await batchService.deleteTicket(ticketId);
+      
+      if (!deleteResult.success) {
+        return res.status(500).json(
+          errorResponse('Échec de suppression du ticket', deleteResult.error, 'TICKET_DELETION_FAILED')
+        );
+      }
+      
+      return res.status(200).json(
+        successResponse('Ticket supprimé avec succès', deleteResult.data)
+      );
+    } catch (error) {
+      logger.error('Error deleting ticket:', error);
+      next(error);
+    }
+  }
 }
 
 module.exports = new TicketsController();

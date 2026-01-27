@@ -514,6 +514,57 @@ class PDFService {
     this.defaultOptions = { ...this.defaultOptions, ...newOptions };
     logger.info('PDF default options updated', { options: this.defaultOptions });
   }
+
+  /**
+   * Récupère un PDF de ticket
+   * @param {string} ticketId - ID du ticket
+   * @returns {Promise<Object>} PDF du ticket
+   */
+  async getTicketPDF(ticketId) {
+    try {
+      // Logique pour récupérer le PDF depuis la base de données ou stockage
+      const pdfData = await this.getPDFFromDatabase(ticketId);
+      
+      if (!pdfData) {
+        return {
+          success: false,
+          error: 'PDF non trouvé pour ce ticket'
+        };
+      }
+      
+      return {
+        success: true,
+        data: pdfData
+      };
+    } catch (error) {
+      logger.error('Error getting ticket PDF:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Récupère le PDF depuis la base de données
+   * @param {string} ticketId - ID du ticket
+   * @returns {Promise<Object|null>} Données du PDF
+   */
+  async getPDFFromDatabase(ticketId) {
+    try {
+      // Implémentation de la récupération depuis la base de données
+      // Pour l'instant, retourne des données mockées
+      return {
+        ticketId,
+        pdfData: 'mock_pdf_data',
+        format: 'base64',
+        generatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      logger.error('Error getting PDF from database:', error);
+      return null;
+    }
+  }
 }
 
 module.exports = new PDFService();
