@@ -1,115 +1,74 @@
 const express = require('express');
 const router = express.Router();
 const ticketsController = require('../controllers/tickets.controller');
-const { authenticate, requirePermission } = require('../../../../shared');
 const { validate, schemas } = require('../../middleware/validation');
-const { injectUserContext } = require('../../../../shared/context-middleware');
 
 /**
  * Routes pour la génération de tickets
  */
 
-// Middleware d'authentification pour toutes les routes
-router.use(authenticate);
-
 // POST /api/tickets/qr/generate - Générer un QR code pour un ticket
 router.post('/qr/generate',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.create'),
   ticketsController.generateQRCode
 );
 
 // POST /api/tickets/generate - Générer un ticket unique
 router.post('/generate',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.create'),
   validate(schemas.generateTicket, 'body'),
   ticketsController.generateTicket
 );
 
 // POST /api/tickets/batch - Générer des tickets en lot
 router.post('/batch',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.batch.create'),
   validate(schemas.generateBatch, 'body'),
-  ticketsController.generateBatch
+  ticketsController.generateBatchTickets
 );
 
 // POST /api/tickets/pdf - Générer un PDF pour un ticket
 router.post('/pdf',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.pdf.create'),
   validate(schemas.generatePDF, 'body'),
   ticketsController.generatePDF
 );
 
 // POST /api/tickets/batch-pdf - Générer des PDFs en lot
 router.post('/batch-pdf',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.pdf.batch'),
   validate(schemas.generateBatchPDF, 'body'),
   ticketsController.generateBatchPDF
 );
 
 // POST /api/tickets/full-batch - Générer un traitement batch complet
 router.post('/full-batch',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.full.batch'),
   validate(schemas.generateFullBatch, 'body'),
   ticketsController.generateFullBatch
 );
 
 // GET /api/tickets/job/:jobId/status - Récupérer le statut d'un job
 router.get('/job/:jobId/status',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.read'),
-  ticketsController.getJobStatus
+  ticketsController.getBatchJobStatus
 );
 
 // DELETE /api/tickets/job/:jobId/cancel - Annuler un job
 router.delete('/job/:jobId/cancel',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.cancel'),
-  ticketsController.cancelJob
+  ticketsController.cancelBatchJob
 );
 
 // GET /api/tickets/:ticketId/download - Télécharger un ticket au format PDF
 router.get('/:ticketId/download',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.read'),
   ticketsController.downloadTicket
 );
 
 // GET /api/tickets/:ticketId/qrcode - Télécharger le QR code d'un ticket
 router.get('/:ticketId/qrcode',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.read'),
   ticketsController.downloadQRCode
 );
 
 // GET /api/tickets/queue/stats - Récupérer les statistiques des queues
 router.get('/queue/stats',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.stats.read'),
   ticketsController.getQueueStats
 );
 
 // POST /api/tickets/queue/clean - Nettoyer les jobs terminés
 router.post('/queue/clean',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.admin'),
   ticketsController.cleanCompletedJobs
 );
 
@@ -117,42 +76,27 @@ router.post('/queue/clean',
 
 // POST /api/tickets/jobs - Créer un job de génération
 router.post('/jobs',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.create'),
   validate(schemas.createJob, 'body'),
   ticketsController.createJob
 );
 
 // POST /api/tickets/jobs/:jobId/process - Traiter un job spécifique
 router.post('/jobs/:jobId/process',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.process'),
   ticketsController.processJob
 );
 
 // GET /api/tickets/jobs - Lister les jobs
 router.get('/jobs',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.jobs.read'),
   ticketsController.listJobs
 );
 
 // GET /api/tickets/events/:eventId/tickets - Récupérer les tickets d'un événement
 router.get('/events/:eventId/tickets',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.read'),
   ticketsController.getEventTickets
 );
 
 // GET /api/tickets/events/:eventId/stats - Statistiques de tickets d'un événement
 router.get('/events/:eventId/stats',
-  authenticate,
-  injectUserContext,
-  requirePermission('tickets.stats.read'),
   ticketsController.getEventTicketStats
 );
 
