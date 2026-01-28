@@ -635,8 +635,7 @@ class TicketsController {
         type,
         eventId,
         ticketCount: Array.isArray(ticketData) ? ticketData.length : 1,
-        priority,
-        userId: req.user?.id
+        priority
       });
 
       // Create job logic here
@@ -648,8 +647,7 @@ class TicketsController {
         options,
         priority,
         status: 'pending',
-        createdAt: new Date().toISOString(),
-        createdBy: req.user?.id
+        createdAt: new Date().toISOString()
       };
 
       return res.status(201).json(
@@ -658,8 +656,7 @@ class TicketsController {
 
     } catch (error) {
       logger.error('Failed to create job', {
-        error: error.message,
-        userId: req.user?.id
+        error: error.message
       });
       
       next(error);
@@ -674,16 +671,14 @@ class TicketsController {
       const { jobId } = req.params;
 
       logger.info('Processing job', {
-        jobId,
-        userId: req.user?.id
+        jobId
       });
 
       // Process job logic here
       const job = {
         id: jobId,
         status: 'processing',
-        startedAt: new Date().toISOString(),
-        processedBy: req.user?.id
+        startedAt: new Date().toISOString()
       };
 
       return res.status(200).json(
@@ -693,8 +688,7 @@ class TicketsController {
     } catch (error) {
       logger.error('Failed to process job', {
         error: error.message,
-        jobId: req.params.jobId,
-        userId: req.user?.id
+        jobId: req.params.jobId
       });
       
       next(error);
@@ -719,8 +713,7 @@ class TicketsController {
         limit,
         status,
         eventId,
-        type,
-        userId: req.user?.id
+        type
       });
 
       // List jobs logic here
@@ -740,8 +733,7 @@ class TicketsController {
 
     } catch (error) {
       logger.error('Failed to list jobs', {
-        error: error.message,
-        userId: req.user?.id
+        error: error.message
       });
       
       next(error);
@@ -766,8 +758,7 @@ class TicketsController {
         page,
         limit,
         status,
-        type,
-        userId: req.user?.id
+        type
       });
 
       // Get event tickets logic here
@@ -789,8 +780,7 @@ class TicketsController {
     } catch (error) {
       logger.error('Failed to get event tickets', {
         error: error.message,
-        eventId: req.params.eventId,
-        userId: req.user?.id
+        eventId: req.params.eventId
       });
       
       next(error);
@@ -805,8 +795,7 @@ class TicketsController {
       const { eventId } = req.params;
 
       logger.info('Getting event ticket stats', {
-        eventId,
-        userId: req.user?.id
+        eventId
       });
 
       // Get event ticket stats logic here
@@ -827,8 +816,7 @@ class TicketsController {
     } catch (error) {
       logger.error('Failed to get event ticket stats', {
         error: error.message,
-        eventId: req.params.eventId,
-        userId: req.user?.id
+        eventId: req.params.eventId
       });
       
       next(error);

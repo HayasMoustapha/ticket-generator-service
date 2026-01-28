@@ -2,15 +2,9 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
-const mongoSanitize = require('express-mongo-sanitize');
 const morgan = require('morgan');
-
-// CONFIGURATION JWT UNIFIÉ - ÉTAPE CRUCIALE
-const UnifiedJWTSecret = require('../../shared/config/unified-jwt-secret');
-UnifiedJWTSecret.configureService('ticket-generator-service');
 
 const logger = require('./utils/logger');
 const healthRoutes = require('./health/health.routes');
@@ -30,27 +24,14 @@ class TicketGeneratorServer {
   }
 
   /**
-   * Configure les middlewares
+   * Configure les middlewares techniques uniquement
    */
   setupMiddleware() {
-    // Sécurité
-    this.app.use(helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          scriptSrc: ["'self'"],
-          imgSrc: ["'self'", "data:", "https:"],
-        },
-      },
-    }));
-
-    // CORS
+    // CORS technique
     this.app.use(cors({
-      origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-      credentials: true,
+      origin: '*',
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
+      allowedHeaders: ['Content-Type']
     }));
 
     // Compression
@@ -60,11 +41,18 @@ class TicketGeneratorServer {
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-    // Sécurité contre les injections NoSQL - CORRECTION : désactiver mongoSanitize défectueux
-    // TODO: Remplacer par une solution plus stable comme mongo-express-sanitize
-    // this.app.use(mongoSanitize());
+    // Rate limiting technique
+    const limiter = rateLimit({
+      windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
+      max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000,
+      message: {
+        error: 'Too many requests',
+        code: 'RATE_LIMIT_EXCEEDED'
+      }
+    });
+    this.app.use(limiter);
 
-    // Logging
+    // Logging technique
     if (process.env.NODE_ENV !== 'test') {
       this.app.use(morgan('combined', {
         stream: {
@@ -73,23 +61,7 @@ class TicketGeneratorServer {
       }));
     }
 
-    // Rate limiting
-    const limiter = rateLimit({
-      windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-      max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
-      message: {
-        success: false,
-        message: 'Trop de requêtes, veuillez réessayer plus tard',
-        error: {
-          code: 'RATE_LIMIT_EXCEEDED'
-        }
-      },
-      standardHeaders: true,
-      legacyHeaders: false,
-    });
-    this.app.use('/api', limiter);
-
-    // Request logging
+    // Request logging technique
     this.app.use((req, res, next) => {
       logger.info('Incoming request', {
         method: req.method,
