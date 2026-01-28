@@ -134,18 +134,12 @@ router.post('/batch-pdf',
 // GET /api/tickets/:ticketId/qr - Obtenir le QR code d'un ticket
 router.get('/:ticketId/qr',
   SecurityMiddleware.withPermissions('tickets.read'),
-  ValidationMiddleware.validateParams({
-    ticketId: Joi.string().required()
-  }),
-  ticketsController.getTicketQRCode
+  ticketsController.getTicketQR
 );
 
 // GET /api/tickets/:ticketId/pdf - Obtenir le PDF d'un ticket
 router.get('/:ticketId/pdf',
   SecurityMiddleware.withPermissions('tickets.read'),
-  ValidationMiddleware.validateParams({
-    ticketId: Joi.string().required()
-  }),
   ticketsController.getTicketPDF
 );
 
@@ -159,23 +153,12 @@ router.post('/validate',
 // GET /api/tickets/:ticketId - Obtenir les détails d'un ticket
 router.get('/:ticketId',
   SecurityMiddleware.withPermissions('tickets.read'),
-  ValidationMiddleware.validateParams({
-    ticketId: Joi.string().required()
-  }),
-  ticketsController.getTicketDetails
+  ticketsController.getTicketById
 );
 
 // GET /api/tickets/event/:eventId - Obtenir les tickets d'un événement
 router.get('/event/:eventId',
   SecurityMiddleware.withPermissions('tickets.read'),
-  ValidationMiddleware.validateParams({
-    eventId: Joi.string().required()
-  }),
-  ValidationMiddleware.validateQuery({
-    page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(20),
-    status: Joi.string().valid('pending', 'generated', 'used', 'expired').optional()
-  }),
   ticketsController.getEventTickets
 );
 
