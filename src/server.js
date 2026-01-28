@@ -21,8 +21,12 @@ const logger = require('./utils/logger');
 const healthRoutes = require('./health/health.routes');
 // Routes des tickets pour les opérations de génération
 const ticketsRoutes = require('./api/routes/tickets.routes');
+// Routes des queues pour le monitoring de la communication asynchrone
+const queuesRoutes = require('./api/routes/queues.routes');
 // Script d'initialisation du service (base de données, etc.)
 const bootstrap = require("./bootstrap");
+// Service de communication Redis Queue pour la communication asynchrone
+const ticketQueueService = require('./core/queue/ticket-queue.service');
 
 /**
  * 🎫 SERVEUR PRINCIPAL DU TICKET GENERATOR SERVICE
@@ -151,7 +155,13 @@ class TicketGeneratorServer {
     this.app.use('/api/tickets', ticketsRoutes);
 
     // ========================================
-    // 📋 ROUTE API RACINE (Documentation)
+    // � ROUTES DE MONITORING DES QUEUES
+    // ========================================
+    // Routes pour surveiller l'état des queues Redis
+    this.app.use('/api/queues', queuesRoutes);
+
+    // ========================================
+    // � ROUTE API RACINE (Documentation)
     // ========================================
     // Route qui liste tous les endpoints disponibles
     this.app.get('/api', (req, res) => {
@@ -160,6 +170,7 @@ class TicketGeneratorServer {
         version: process.env.npm_package_version || '1.0.0',  // Version
         endpoints: {  // Liste des endpoints disponibles
           tickets: '/api/tickets',
+          queues: '/api/queues',
           health: '/health'
         },
         documentation: '/api/docs',
@@ -279,6 +290,12 @@ class TicketGeneratorServer {
       // Exécute le script de bootstrap (crée la BD, applique les migrations, etc.)
       await bootstrap.initialize();
       
+      // ========================================
+      // 📡 INITIALISATION DU SERVICE DE QUEUE
+      // ========================================
+      // Initialise le service Redis Queue pour la communication asynchrone
+      await ticketQueueService.initialize();
+      
       logger.info('🚀 Starting Ticket Generator Service server...');
       
       // ========================================
@@ -297,7 +314,8 @@ class TicketGeneratorServer {
             batchProcessing: true, // Traitement en lot
             templates: true,       // Gestion de templates
             webhooks: true,        // Support des webhooks
-            metrics: process.env.ENABLE_METRICS === 'true'  // Métriques activées ou non
+            metrics: process.env.ENABLE_METRICS === 'true',  // Métriques activées ou non
+            redisQueue: true       // Communication asynchrone Redis Queue
           }
         });
       });
@@ -367,6 +385,19 @@ class TicketGeneratorServer {
         logger.info('Redis queues shut down');
       } catch (error) {
         logger.error('Error shutting down Redis queues', {
+          error: error.message
+        });
+      }
+
+      // ========================================
+      // 📡 ARRÊT DU SERVICE DE QUEUE
+      // ========================================
+      // Ferme le service Redis Queue de communication asynchrone
+      try {
+        await ticketQueueService.shutdown();
+        logger.info('Ticket Queue Service shut down');
+      } catch (error) {
+        logger.error('Error shutting down Ticket Queue Service', {
           error: error.message
         });
       }
