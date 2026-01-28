@@ -134,7 +134,7 @@ router.post('/batch-pdf',
 // GET /api/tickets/:ticketId/qr - Obtenir le QR code d'un ticket
 router.get('/:ticketId/qr',
   SecurityMiddleware.withPermissions('tickets.read'),
-  ticketsController.getTicketQR
+  ticketsController.getTicketQRCode
 );
 
 // GET /api/tickets/:ticketId/pdf - Obtenir le PDF d'un ticket
@@ -153,7 +153,7 @@ router.post('/validate',
 // GET /api/tickets/:ticketId - Obtenir les détails d'un ticket
 router.get('/:ticketId',
   SecurityMiddleware.withPermissions('tickets.read'),
-  ticketsController.getTicketById
+  ticketsController.getTicketDetails
 );
 
 // GET /api/tickets/event/:eventId - Obtenir les tickets d'un événement
