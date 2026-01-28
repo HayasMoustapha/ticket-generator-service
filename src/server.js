@@ -1,108 +1,164 @@
+// ========================================
+// 📄 IMPORTATIONS ET CONFIGURATION INITIALE
+// ========================================
+// Chargement des variables d'environnement depuis le fichier .env
 require('dotenv').config();
 
+// Express : Framework web pour créer le serveur
 const express = require('express');
+// CORS : Middleware pour autoriser les requêtes cross-origin
 const cors = require('cors');
+// Compression : Middleware pour compresser les réponses
 const compression = require('compression');
+// RateLimit : Middleware pour limiter les requêtes (protection contre abus)
 const rateLimit = require('express-rate-limit');
+// Morgan : Middleware pour logger les requêtes HTTP
 const morgan = require('morgan');
 
+// Logger personnalisé pour le service
 const logger = require('./utils/logger');
+// Routes de santé pour vérifier le fonctionnement du service
 const healthRoutes = require('./health/health.routes');
+// Routes des tickets pour les opérations de génération
 const ticketsRoutes = require('./api/routes/tickets.routes');
+// Script d'initialisation du service (base de données, etc.)
 const bootstrap = require("./bootstrap");
 
 /**
- * Serveur principal du Ticket Generator Service
+ * 🎫 SERVEUR PRINCIPAL DU TICKET GENERATOR SERVICE
+ * Ce serveur gère la génération de QR codes, PDFs et tickets
+ * Il est configuré pour être purement technique sans authentification
  */
 class TicketGeneratorServer {
+  
+  /**
+   * Constructeur du serveur
+   * Initialise l'application Express et configure tous les composants
+   */
   constructor() {
+    // Création de l'application Express
     this.app = express();
+    // Port d'écoute (3004 par défaut, ou depuis les variables d'environnement)
     this.port = process.env.PORT || 3004;
-    this.setupMiddleware();
-    this.setupRoutes();
-    this.setupErrorHandling();
+    
+    // Configuration des différents composants du serveur
+    this.setupMiddleware();    // Configuration des middlewares techniques
+    this.setupRoutes();        // Configuration des routes API
+    this.setupErrorHandling(); // Configuration de la gestion des erreurs
   }
 
   /**
    * Configure les middlewares techniques uniquement
+   * Pas de middlewares d'authentification ou de sécurité
    */
   setupMiddleware() {
-    // CORS technique
+    // ========================================
+    // 🔓 CONFIGURATION CORS (Cross-Origin Resource Sharing)
+    // ========================================
+    // Permet à toutes les origines d'accéder à l'API (mode technique)
     this.app.use(cors({
-      origin: '*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type']
+      origin: '*',  // Accepte toutes les origines
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Méthodes HTTP autorisées
+      allowedHeaders: ['Content-Type']  // En-têtes autorisés
     }));
 
-    // Compression
+    // ========================================
+    // 🗜️ COMPRESSION DES RÉPONSES
+    // ========================================
+    // Compresse les réponses pour réduire la taille des données transférées
     this.app.use(compression());
 
-    // Body parsing
+    // ========================================
+    // 📦 PARSING DES DONNÉES ENTRANTES
+    // ========================================
+    // Parse les corps de requête au format JSON (limite 10MB)
     this.app.use(express.json({ limit: '10mb' }));
+    // Parse les données de formulaires URL-encoded (limite 10MB)
     this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-    // Rate limiting technique
+    // ========================================
+    // ⚡ LIMITATION DE DÉBIT (Rate Limiting)
+    // ========================================
+    // Protège contre les abus en limitant le nombre de requêtes par IP
     const limiter = rateLimit({
-      windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-      max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000,
-      message: {
+      windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // Fenêtre de temps (15 minutes par défaut)
+      max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // Nombre max de requêtes par fenêtre
+      message: {  // Message d'erreur quand la limite est dépassée
         error: 'Too many requests',
         code: 'RATE_LIMIT_EXCEEDED'
       }
     });
+    // Application du rate limiting à toutes les routes
     this.app.use(limiter);
 
-    // Logging technique
+    // ========================================
+    // 📝 LOGGING TECHNIQUE
+    // ========================================
+    // Active le logging HTTP uniquement en production (pas en test)
     if (process.env.NODE_ENV !== 'test') {
       this.app.use(morgan('combined', {
+        // Redirige les logs de Morgan vers notre logger personnalisé
         stream: {
           write: (message) => logger.info(message.trim())
         }
       }));
     }
 
-    // Request logging technique
+    // ========================================
+    // 📊 LOGGING PERSONNALISÉ DES REQUÊTES
+    // ========================================
+    // Middleware personnalisé pour logger chaque requête entrante
     this.app.use((req, res, next) => {
       logger.info('Incoming request', {
-        method: req.method,
-        url: req.url,
-        ip: req.ip,
-        userAgent: req.get('User-Agent')
+        method: req.method,        // Méthode HTTP (GET, POST, etc.)
+        url: req.url,              // URL de la requête
+        ip: req.ip,                // Adresse IP du client
+        userAgent: req.get('User-Agent')  // Navigateur/client utilisé
       });
-      next();
+      next();  // Passe au middleware suivant
     });
   }
 
   /**
-   * Configure les routes
+   * Configure les routes de l'application
+   * Définit tous les endpoints disponibles pour le service
    */
   setupRoutes() {
-    // Middleware d'authentification robuste pour les routes protégées
-    const RobustAuthMiddleware = require('../../shared/middlewares/robust-auth-middleware');
-    
-    // Route racine
+    // ========================================
+    // 🏠 ROUTE RACINE (Page d'accueil du service)
+    // ========================================
+    // Route d'accueil qui donne des informations sur le service
     this.app.get('/', (req, res) => {
       res.json({
-        service: 'Ticket Generator Service',
-        version: process.env.npm_package_version || '1.0.0',
-        status: 'running',
-        timestamp: new Date().toISOString()
+        service: 'Ticket Generator Service',  // Nom du service
+        version: process.env.npm_package_version || '1.0.0',  // Version du service
+        status: 'running',  // État actuel
+        timestamp: new Date().toISOString()  // Date et heure actuelles
       });
     });
 
-    // Routes de santé (publiques)
+    // ========================================
+    // 💚 ROUTES DE SANTÉ (Health Check)
+    // ========================================
+    // Routes publiques pour vérifier le fonctionnement du service
     this.app.use('/health', healthRoutes);
 
-    // Routes API protégées
-    this.app.use('/api', RobustAuthMiddleware.authenticate());
+    // ========================================
+    // 🎫 ROUTES API (sans authentification)
+    // ========================================
+    // Routes pour les opérations de génération de tickets
+    // Pas d'authentification requise - mode technique pur
     this.app.use('/api/tickets', ticketsRoutes);
 
-    // Route API racine
+    // ========================================
+    // 📋 ROUTE API RACINE (Documentation)
+    // ========================================
+    // Route qui liste tous les endpoints disponibles
     this.app.get('/api', (req, res) => {
       res.json({
-        service: 'Ticket Generator API',
-        version: process.env.npm_package_version || '1.0.0',
-        endpoints: {
+        service: 'Ticket Generator API',  // Nom de l'API
+        version: process.env.npm_package_version || '1.0.0',  // Version
+        endpoints: {  // Liste des endpoints disponibles
           tickets: '/api/tickets',
           health: '/health'
         },
@@ -111,14 +167,17 @@ class TicketGeneratorServer {
       });
     });
 
-    // Route 404
+    // ========================================
+    // 🔍 ROUTE 404 (Page non trouvée)
+    // ========================================
+    // Route par défaut pour les URLs qui n'existent pas
     this.app.use((req, res) => {
       res.status(404).json({
         success: false,
         message: 'Route non trouvée',
         error: {
           code: 'NOT_FOUND',
-          path: req.originalUrl
+          path: req.originalUrl  // URL demandée qui n'existe pas
         },
         timestamp: new Date().toISOString()
       });
@@ -127,63 +186,81 @@ class TicketGeneratorServer {
 
   /**
    * Configure la gestion des erreurs
+   * Définit comment les erreurs sont traitées et retournées
    */
   setupErrorHandling() {
-    // Gestionnaire d'erreurs global
+    // ========================================
+    // 🚨 GESTIONNAIRE D'ERREURS GLOBAL
+    // ========================================
+    // Intercepte toutes les erreurs non gérées dans l'application
     this.app.use((error, req, res, next) => {
+      // Enregistre l'erreur dans les logs avec détails complets
       logger.error('Unhandled error', {
-        error: error.message,
-        stack: error.stack,
-        method: req.method,
-        url: req.url,
-        ip: req.ip,
-        userAgent: req.get('User-Agent')
+        error: error.message,  // Message d'erreur
+        stack: error.stack,    // Pile d'appels pour débogage
+        method: req.method,   // Méthode HTTP de la requête
+        url: req.url,         // URL de la requête
+        ip: req.ip,           // IP du client
+        userAgent: req.get('User-Agent')  // Navigateur/client
       });
 
-      // Ne pas envoyer le stack trace en production
+      // Vérifie si on est en mode développement pour décider du niveau de détail
       const isDevelopment = process.env.NODE_ENV === 'development';
       
+      // Construction de la réponse d'erreur
       const errorResponse = {
         success: false,
-        message: isDevelopment ? error.message : 'Erreur interne du serveur',
+        message: isDevelopment ? error.message : 'Erreur interne du serveur',  // Message détaillé en dev, générique en prod
         error: {
           code: 'INTERNAL_SERVER_ERROR'
         },
         timestamp: new Date().toISOString()
       };
 
+      // En développement, ajoute la pile d'appels pour le débogage
       if (isDevelopment) {
         errorResponse.error.stack = error.stack;
       }
 
+      // Retour de l'erreur avec le code HTTP approprié
       res.status(error.status || 500).json(errorResponse);
     });
 
-    // Gestion des promesses rejetées non capturées
+    // ========================================
+    // ⚠️ GESTION DES PROMESSES REJETÉES
+    // ========================================
+    // Capture les promesses rejetées non gérées pour éviter les crashes
     process.on('unhandledRejection', (reason, promise) => {
       logger.error('Unhandled Rejection at:', {
-        promise,
-        reason: reason.message || reason
+        promise,  // La promesse qui a été rejetée
+        reason: reason.message || reason  // La raison du rejet
       });
     });
 
-    // Gestion des exceptions non capturées
+    // ========================================
+    // 🚨 GESTION DES EXCEPTIONS NON CAPTURÉES
+    // ========================================
+    // Capture les exceptions qui ne sont pas gérées par try/catch
     process.on('uncaughtException', (error) => {
       logger.error('Uncaught Exception:', {
-        error: error.message,
-        stack: error.stack
+        error: error.message,  // Message de l'exception
+        stack: error.stack     // Pile d'appels pour débogage
       });
       
-      // Arrêter le serveur proprement
+      // Arrêter le serveur proprement pour éviter un état corrompu
       this.gracefulShutdown('SIGTERM');
     });
 
-    // Gestion des signaux système
+    // ========================================
+    // 🔄 GESTION DES SIGNAUX SYSTÈME
+    // ========================================
+    // Gestion du signal SIGTERM (demande d'arrêt du système)
     process.on('SIGTERM', () => {
       logger.info('SIGTERM received');
       this.gracefulShutdown('SIGTERM');
     });
 
+    // Gestion du signal SIGINT (Ctrl+C)
     process.on('SIGINT', () => {
       logger.info('SIGINT received');
       this.gracefulShutdown('SIGINT');
@@ -192,75 +269,98 @@ class TicketGeneratorServer {
 
   /**
    * Démarre le serveur
+   * Initialise les services et commence à écouter les requêtes
    */
   async start() {
     try {
-      // Bootstrap automatique (crée la BD et applique les migrations)
+      // ========================================
+      // 🚀 INITIALISATION DES SERVICES
+      // ========================================
+      // Exécute le script de bootstrap (crée la BD, applique les migrations, etc.)
       await bootstrap.initialize();
       
       logger.info('🚀 Starting Ticket Generator Service server...');
       
+      // ========================================
+      // 🎯 DÉMARRAGE DU SERVEUR HTTP
+      // ========================================
+      // Le serveur commence à écouter les requêtes sur le port configuré
       this.server = this.app.listen(this.port, () => {
         logger.info(`Ticket Generator Service started successfully`, {
-          port: this.port,
-          environment: process.env.NODE_ENV || 'development',
-          version: process.env.npm_package_version || '1.0.0',
-          pid: process.pid,
-          capabilities: {
-            qrCodes: true,
-            pdfGeneration: true,
-            batchProcessing: true,
-            templates: true,
-            webhooks: true,
-            metrics: process.env.ENABLE_METRICS === 'true'
+          port: this.port,  // Port d'écoute
+          environment: process.env.NODE_ENV || 'development',  // Environnement (dev/prod)
+          version: process.env.npm_package_version || '1.0.0',  // Version du service
+          pid: process.pid,  // ID du processus
+          capabilities: {  // Capacités du service
+            qrCodes: true,        // Génération de QR codes
+            pdfGeneration: true,   // Génération de PDFs
+            batchProcessing: true, // Traitement en lot
+            templates: true,       // Gestion de templates
+            webhooks: true,        // Support des webhooks
+            metrics: process.env.ENABLE_METRICS === 'true'  // Métriques activées ou non
           }
         });
       });
     } catch (error) {
+      // En cas d'erreur lors du démarrage, on log et on quitte
       logger.error('❌ Failed to start server:', error);
-      process.exit(1);
+      process.exit(1);  // Quitte avec un code d'erreur
     }
 
+    // ========================================
+    // 🚨 GESTION DES ERREURS DE SERVEUR
+    // ========================================
+    // Intercepte les erreurs du serveur HTTP
     this.server.on('error', (error) => {
+      // Si ce n'est pas une erreur de type "listen", on la propage
       if (error.syscall !== 'listen') {
         throw error;
       }
 
+      // Détermine le type d'adresse (port ou pipe)
       const bind = typeof this.port === 'string'
-        ? 'Pipe ' + this.port
-        : 'Port ' + this.port;
+        ? 'Pipe ' + this.port    // Pour les sockets Unix
+        : 'Port ' + this.port;   // Pour les ports TCP
 
+      // Gère les erreurs spécifiques au démarrage
       switch (error.code) {
-        case 'EACCES':
+        case 'EACCES':  // Erreur de permissions
           logger.error(`${bind} requires elevated privileges`);
-          process.exit(1);
+          process.exit(1);  // Quitte avec code d'erreur
           break;
-        case 'EADDRINUSE':
+        case 'EADDRINUSE':  // Port déjà utilisé
           logger.error(`${bind} is already in use`);
-          process.exit(1);
+          process.exit(1);  // Quitte avec code d'erreur
           break;
-        default:
-          throw error;
+        default:  // Autre erreur
+          throw error;  // Propage l'erreur
       }
     });
   }
 
   /**
    * Arrête proprement le serveur
-   * @param {string} signal - Signal reçu
+   * Ferme les connexions existantes et libère les ressources
+   * @param {string} signal - Signal reçu (SIGTERM, SIGINT, etc.)
    */
   async gracefulShutdown(signal) {
     logger.info(`Graceful shutdown initiated by ${signal}`);
 
     try {
-      // Arrêter d'accepter de nouvelles connexions
+      // ========================================
+      // 🛑 ARRÊT DES CONNEXIONS HTTP
+      // ========================================
+      // Ferme le serveur HTTP pour ne plus accepter de nouvelles requêtes
       if (this.server) {
         this.server.close(() => {
           logger.info('HTTP server closed');
         });
       }
 
-      // Arrêter les queues Redis si présentes
+      // ========================================
+      // 🔴 ARRÊT DES SERVICES DE TRAITEMENT
+      // ========================================
+      // Ferme les connexions Redis et arrête les queues de traitement
       try {
         const batchService = require('./core/database/batch.service');
         await batchService.shutdown();
@@ -271,18 +371,25 @@ class TicketGeneratorServer {
         });
       }
 
+      // ========================================
+      // ✅ ARRÊT TERMINÉ
+      // ========================================
       logger.info('Graceful shutdown completed');
-      process.exit(0);
+      process.exit(0);  // Quitte avec succès
     } catch (error) {
+      // En cas d'erreur pendant l'arrêt
       logger.error('Error during graceful shutdown', {
         error: error.message
       });
-      process.exit(1);
+      process.exit(1);  // Quitte avec code d'erreur
     }
   }
 }
 
-// Démarrer le serveur si ce fichier est exécuté directement
+// ========================================
+// 🚀 DÉMARRAGE AUTOMATIQUE
+// ========================================
+// Démarrer le serveur si ce fichier est exécuté directement (node src/server.js)
 if (require.main === module) {
   const server = new TicketGeneratorServer();
   server.start().catch(error => {
