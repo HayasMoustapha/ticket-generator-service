@@ -9,22 +9,22 @@
 -- ========================================
 CREATE OR REPLACE VIEW external_references_validation AS
 SELECT 
-    'ticket_generation_jobs' as table_name,
-    'event_id' as column_name,
+    'ticket_generation_logs' as table_name,
+    'job_id' as column_name,
     COUNT(*) as total_records,
-    COUNT(CASE WHEN event_id IS NOT NULL THEN 1 END) as with_reference,
-    COUNT(CASE WHEN event_id IS NULL THEN 1 END) as null_reference
-FROM ticket_generation_jobs WHERE deleted_at IS NULL
+    COUNT(CASE WHEN job_id IS NOT NULL THEN 1 END) as with_reference,
+    COUNT(CASE WHEN job_id IS NULL THEN 1 END) as null_reference
+FROM ticket_generation_logs
 
 UNION ALL
 
 SELECT 
-    'ticket_generation_jobs' as table_name,
-    'user_id' as column_name,
+    'generated_tickets' as table_name,
+    'job_id' as column_name,
     COUNT(*) as total_records,
-    COUNT(CASE WHEN user_id IS NOT NULL THEN 1 END) as with_reference,
-    COUNT(CASE WHEN user_id IS NULL THEN 1 END) as null_reference
-FROM ticket_generation_jobs WHERE deleted_at IS NULL
+    COUNT(CASE WHEN job_id IS NOT NULL THEN 1 END) as with_reference,
+    COUNT(CASE WHEN job_id IS NULL THEN 1 END) as null_reference
+FROM generated_tickets
 
 UNION ALL
 
@@ -34,7 +34,7 @@ SELECT
     COUNT(*) as total_records,
     COUNT(CASE WHEN event_id IS NOT NULL THEN 1 END) as with_reference,
     COUNT(CASE WHEN event_id IS NULL THEN 1 END) as null_reference
-FROM generated_tickets WHERE deleted_at IS NULL
+FROM generated_tickets
 
 UNION ALL
 
@@ -44,7 +44,7 @@ SELECT
     COUNT(*) as total_records,
     COUNT(CASE WHEN template_id IS NOT NULL THEN 1 END) as with_reference,
     COUNT(CASE WHEN template_id IS NULL THEN 1 END) as null_reference
-FROM generated_tickets WHERE deleted_at IS NULL
+FROM generated_tickets
 
 UNION ALL
 
@@ -54,7 +54,7 @@ SELECT
     COUNT(*) as total_records,
     COUNT(CASE WHEN guest_id IS NOT NULL THEN 1 END) as with_reference,
     COUNT(CASE WHEN guest_id IS NULL THEN 1 END) as null_reference
-FROM generated_tickets WHERE deleted_at IS NULL;
+FROM generated_tickets;
 
 -- ========================================
 -- Fonction pour valider l'intégrité des références (IDEMPOTENT)

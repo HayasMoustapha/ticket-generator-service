@@ -1,37 +1,48 @@
 -- ============================================
 -- TICKET GENERATOR SERVICE - Initial Schema
--- Diagram: /event-planner-documents/ticket-generator-service-diagram.md
+-- Service spécialisé pour la génération de tickets
 -- ============================================
-
--- Créer la base de données si elle n'existe pas
--- Note: Exécuté automatiquement avec des droits étendus
-CREATE DATABASE IF NOT EXISTS event_planner_ticket_generator;
 
 -- Extension pour les UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Table principale selon le diagramme
-CREATE TABLE IF NOT EXISTS ticket_generation_jobs (
+-- Table ticket_generation_logs (logs des traitements)
+CREATE TABLE IF NOT EXISTS ticket_generation_logs (
     id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL, -- Référence au job dans event-planner-core (pas une clé étrangère)
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    message TEXT,
     details JSONB DEFAULT '{}',
-    event_id UUID,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    started_at TIMESTAMP WITH TIME ZONE,
-    completed_at TIMESTAMP WITH TIME ZONE,
-    error_message TEXT,
-    retry_count INTEGER DEFAULT 0,
-    max_retries INTEGER DEFAULT 3
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-
+-- Table generated_tickets (tickets générés)
+CREATE TABLE IF NOT EXISTS generated_tickets (
+    id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL, -- Référence au job dans event-planner-core (pas une clé étrangère)
+    ticket_code VARCHAR UNIQUE NOT NULL,
+    qr_code_data TEXT,
+    template_id BIGINT,
+    guest_id BIGINT,
+    event_id BIGINT,
+    pdf_file_path VARCHAR,
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
 -- Index pour les performances
-CREATE INDEX IF NOT EXISTS idx_ticket_generation_jobs_status ON ticket_generation_jobs(status);
-CREATE INDEX IF NOT EXISTS idx_ticket_generation_jobs_event_id ON ticket_generation_jobs(event_id);
-CREATE INDEX IF NOT EXISTS idx_ticket_generation_jobs_created_at ON ticket_generation_jobs(created_at);
+CREATE INDEX IF NOT EXISTS idx_ticket_generation_logs_job_id ON ticket_generation_logs(job_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_generation_logs_status ON ticket_generation_logs(status);
+CREATE INDEX IF NOT EXISTS idx_ticket_generation_logs_created_at ON ticket_generation_logs(created_at);
 
+CREATE INDEX IF NOT EXISTS idx_generated_tickets_job_id ON generated_tickets(job_id);
+CREATE INDEX IF NOT EXISTS idx_generated_tickets_ticket_code ON generated_tickets(ticket_code);
+CREATE INDEX IF NOT EXISTS idx_generated_tickets_template_id ON generated_tickets(template_id);
+CREATE INDEX IF NOT EXISTS idx_generated_tickets_guest_id ON generated_tickets(guest_id);
+CREATE INDEX IF NOT EXISTS idx_generated_tickets_event_id ON generated_tickets(event_id);
+CREATE INDEX IF NOT EXISTS idx_generated_tickets_generated_at ON generated_tickets(generated_at);
 
 -- Table de migration pour suivre les versions
 CREATE TABLE IF NOT EXISTS migration_history (
