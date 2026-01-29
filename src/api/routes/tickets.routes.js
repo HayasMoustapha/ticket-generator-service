@@ -253,13 +253,12 @@ router.post('/batch-pdf',
   ticketsController.generateBatchPDF
 );
 
-// Route POST pour valider un ticket (vérifier son authenticité)
-// URL : /api/tickets/validate
-// Validation des données avec le schéma validateTicketSchema
-router.post('/validate',
-  ValidationMiddleware.validate(validateTicketSchema),
-  ticketsController.validateTicket
-);
+// NOTE : La validation de ticket est gérée par scan-validation-service
+// Ce service ne fait que de la génération technique
+// router.post('/validate',
+//   ValidationMiddleware.validate(validateTicketSchema),
+//   ticketsController.validateTicket
+// );
 
 // Route GET pour obtenir le QR code d'un ticket spécifique
 // URL : /api/tickets/:ticketId/qr
@@ -307,12 +306,11 @@ router.post('/:ticketId/regenerate',
   ticketsController.regenerateTicket
 );
 
-// Route DELETE pour supprimer un ticket
-// URL : /api/tickets/:ticketId
-// Pas de validation nécessaire, suppression simple
-router.delete('/:ticketId',
-  ticketsController.deleteTicket
-);
+// NOTE : La suppression de tickets métier est gérée par event-planner-core
+// Ce service ne gère que la génération technique
+// router.delete('/:ticketId',
+//   ticketsController.deleteTicket
+// );
 
 // ========================================
 // 📤 EXPORTATION DU ROUTER
