@@ -2,7 +2,7 @@
 -- Cette table est utilisée par le système de bootstrap pour suivre les migrations appliquées
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
-    id INTEGER PRIMARY KEY DEFAULT nextval('schema_migrations_id_seq'::regclass),
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     migration_name VARCHAR(255) NOT NULL UNIQUE,
     checksum VARCHAR(64) NOT NULL,
     file_size BIGINT NOT NULL,
