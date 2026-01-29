@@ -1,3 +1,24 @@
+/**
+ * 🎫 TICKET GENERATOR SERVICE - SERVEUR PRINCIPAL
+ * 
+ * RÔLE : Service technique de génération de tickets QR codes et PDFs
+ * PORT : 3004
+ * 
+ * RESPONSABILITÉS :
+ * - Génération technique de QR codes
+ * - Génération technique de PDFs tickets
+ * - Traitement en lot de tickets
+ * - Gestion des files d'attente Redis
+ * - Stockage des fichiers générés
+ * 
+ * NE GÈRE PAS :
+ * - L'authentification utilisateur (délégué à event-planner-auth)
+ * - La logique métier (délégué à event-planner-core)
+ * - La validation de tickets (délégué à scan-validation-service)
+ * - La gestion des événements (délégué à event-planner-core)
+ * - La gestion des utilisateurs (délégué à event-planner-core)
+ */
+
 // ========================================
 // 📄 IMPORTATIONS ET CONFIGURATION INITIALE
 // ========================================
@@ -17,23 +38,24 @@ const morgan = require('morgan');
 // Helmet : Middleware pour sécuriser les en-têtes HTTP
 const helmet = require('helmet');
 
-// Logger personnalisé pour le service
+// Import des services et routes internes
 const logger = require('./utils/logger');
-// Routes de santé pour vérifier le fonctionnement du service
 const healthRoutes = require('./routes/health-routes');
-// Service principal de génération de tickets
 const { initializeTicketGeneratorService, shutdownTicketGeneratorService } = require('./services/ticket-generator-service');
 
 /**
- * 🎫 SERVEUR PRINCIPAL DU TICKET GENERATOR SERVICE
- * Ce serveur gère la génération de QR codes, PDFs et tickets
- * Il est configuré pour être purement technique sans authentification
+ * �️ CLASSE PRINCIPALE DU SERVEUR
+ * 
+ * Configure et démarre le service de génération de tickets.
+ * Ce service est purement technique et ne contient aucune logique métier.
  */
 class TicketGeneratorServer {
   
   /**
-   * Constructeur du serveur
-   * Initialise l'application Express et configure tous les composants
+   * 🔧 CONSTRUCTEUR DU SERVEUR
+   * 
+   * Initialise l'application Express et configure tous les composants.
+   * Le service est conçu pour fonctionner sans authentification utilisateur.
    */
   constructor() {
     // Création de l'application Express
@@ -48,43 +70,36 @@ class TicketGeneratorServer {
   }
 
   /**
-   * Configure les middlewares techniques uniquement
-   * Pas de middlewares d'authentification ou de sécurité
+   * ⚙️ CONFIGURATION DES MIDDLEWARES TECHNIQUES
+   * 
+   * Configure les middlewares de sécurité, parsing et logging.
+   * Note : Pas d'authentification - service technique pur.
    */
   setupMiddleware() {
-    // ========================================
     // 🛡️ SÉCURITÉ DES EN-TÊTES HTTP (Helmet)
-    // ========================================
     // Configure les en-têtes de sécurité (CSP, X-Frame-Options, etc.)
     this.app.use(helmet());
 
-    // ========================================
-    // 🔓 CONFIGURATION CORS (Cross-Origin Resource Sharing)
-    // ========================================
+    // 🌐 CONFIGURATION CORS (Cross-Origin Resource Sharing)
     // Restreint les origines au Core Service uniquement
+    // Permet à event-planner-core d'appeler ce service
     this.app.use(cors({
       origin: process.env.CORS_ORIGIN || 'http://localhost:3001',  // Core Service uniquement
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Méthodes HTTP autorisées
       allowedHeaders: ['Content-Type', 'X-API-Key']  // En-têtes autorisés
     }));
 
-    // ========================================
-    // 🗜️ COMPRESSION DES RÉPONSES
-    // ========================================
+    // � COMPRESSION DES RÉPONSES
     // Compresse les réponses pour réduire la taille des données transférées
     this.app.use(compression());
 
-    // ========================================
-    // 📦 PARSING DES DONNÉES ENTRANTES
-    // ========================================
-    // Parse les corps de requête au format JSON (limite 10MB)
+    // � PARSING DES DONNÉES ENTRANTES
+    // Parse les corps de requête au format JSON (limite 10MB pour les QR codes)
     this.app.use(express.json({ limit: '10mb' }));
     // Parse les données de formulaires URL-encoded (limite 10MB)
     this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-    // ========================================
-    // ⚡ LIMITATION DE DÉBIT (Rate Limiting)
-    // ========================================
+    // 🚦 LIMITATION DE DÉBIT (Rate Limiting)
     // Protège contre les abus en limitant le nombre de requêtes par IP
     const limiter = rateLimit({
       windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // Fenêtre de temps (15 minutes par défaut)
@@ -97,9 +112,7 @@ class TicketGeneratorServer {
     // Application du rate limiting à toutes les routes
     this.app.use(limiter);
 
-    // ========================================
-    // 📝 LOGGING TECHNIQUE
-    // ========================================
+    // � LOGGING TECHNIQUE
     // Active le logging HTTP uniquement en production (pas en test)
     if (process.env.NODE_ENV !== 'test') {
       this.app.use(morgan('combined', {
@@ -110,9 +123,7 @@ class TicketGeneratorServer {
       }));
     }
 
-    // ========================================
-    // 📊 LOGGING PERSONNALISÉ DES REQUÊTES
-    // ========================================
+    // � LOGGING PERSONNALISÉ DES REQUÊTES
     // Middleware personnalisé pour logger chaque requête entrante
     this.app.use((req, res, next) => {
       logger.info('Incoming request', {
@@ -126,14 +137,14 @@ class TicketGeneratorServer {
   }
 
   /**
-   * Configure les routes de l'application
-   * Définit tous les endpoints disponibles pour le service
+   * 🛣️ CONFIGURATION DES ROUTES
+   * 
+   * Configure toutes les routes du service.
+   * Note : Aucune route n'est protégée par authentification.
    */
   setupRoutes() {
-    // ========================================
-    // 🏠 ROUTE RACINE (Page d'accueil du service)
-    // ========================================
-    // Route d'accueil qui donne des informations sur le service
+    // 🏠 ROUTE RACINE - Informations sur le service
+    // Endpoint public pour vérifier que le service fonctionne
     this.app.get('/', (req, res) => {
       res.json({
         service: 'Ticket Generator Service',  // Nom du service
@@ -143,15 +154,11 @@ class TicketGeneratorServer {
       });
     });
 
-    // ========================================
-    // 💚 ROUTES DE SANTÉ (Health Check)
-    // ========================================
-    // Routes publiques pour vérifier le fonctionnement du service
+    // 🏥 ROUTES DE SANTÉ - Monitoring technique
+    // Endpoints publics pour le monitoring du service
     this.app.use('/', healthRoutes);
 
-    // ========================================
-    // 🔄 ROUTE API RACINE (Documentation)
-    // ========================================
+    // � ROUTE API RACINE - Documentation de l'API
     // Route qui liste tous les endpoints disponibles
     this.app.get('/api', (req, res) => {
       res.json({
@@ -167,9 +174,7 @@ class TicketGeneratorServer {
       });
     });
 
-    // ========================================
-    // 🔍 ROUTE 404 (Page non trouvée)
-    // ========================================
+    // � ROUTE 404 - Gestion des routes non trouvées
     // Route par défaut pour les URLs qui n'existent pas
     this.app.use((req, res) => {
       res.status(404).json({
