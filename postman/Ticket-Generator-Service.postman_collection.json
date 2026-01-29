@@ -1,0 +1,617 @@
+{
+	"info": {
+		"_postman_id": "ticket-generator-service-collection",
+		"name": "Ticket Generator Service - Technical API",
+		"description": "Collection complète pour Ticket Generator Service (Port 3004). Service technique de génération QR/PDF.\n\n🔥 RÈGLE STRICTE: Service technique - PAS d'authentification utilisateur.\nLes bodies ne contiennent QUE les champs réels des schémas SQL.\n❌ INTERDITS: id, created_at, updated_at (gérés automatiquement)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3004/api",
+			"type": "string"
+		},
+		{
+			"key": "testTicketId",
+			"value": "ticket-123-abc",
+			"type": "string"
+		},
+		{
+			"key": "testEventId",
+			"value": "event-456-def",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "🎫 QR Code Generation",
+			"item": [
+				{
+					"name": "Generate QR Code",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"QR code generated successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('qr_code');",
+									"    pm.expect(jsonData.data).to.have.property('format');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ticketCode\": \"TKT-001-ABC123\",\n  \"ticketId\": \"{{testTicketId}}\",\n  \"eventId\": \"{{testEventId}}\",\n  \"format\": \"base64\",\n  \"size\": \"medium\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tickets/qr/generate",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"qr",
+								"generate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Ticket QR Code",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Ticket QR code retrieved successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('qr_code');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tickets/{{testTicketId}}/qr",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"{{testTicketId}}",
+								"qr"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Génération et récupération de QR codes pour tickets"
+		},
+		{
+			"name": "🎫 Complete Ticket Generation",
+			"item": [
+				{
+					"name": "Generate Ticket",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Ticket generated successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('ticket_id');",
+									"    pm.expect(jsonData.data).to.have.property('qr_code');",
+									"    pm.expect(jsonData.data).to.have.property('pdf_url');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ticketData\": {\n    \"id\": \"{{testTicketId}}\",\n    \"eventId\": \"{{testEventId}}\",\n    \"type\": \"vip\",\n    \"attendeeName\": \"Jean Dupont\",\n    \"attendeeEmail\": \"jean.dupont@example.com\"\n  },\n  \"options\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true,\n    \"includeLogo\": false,\n    \"customFields\": {\n      \"seat_number\": \"A15\",\n      \"gate\": \"Gate B\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tickets/generate",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"generate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Batch",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Batch generated successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('batch_id');",
+									"    pm.expect(jsonData.data).to.have.property('tickets_generated');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tickets\": [\n    {\n      \"id\": \"ticket-001\",\n      \"eventId\": \"{{testEventId}}\",\n      \"type\": \"standard\",\n      \"attendeeName\": \"Marie Martin\",\n      \"attendeeEmail\": \"marie.martin@example.com\"\n    },\n    {\n      \"id\": \"ticket-002\",\n      \"eventId\": \"{{testEventId}}\",\n      \"type\": \"vip\",\n      \"attendeeName\": \"Pierre Durand\",\n      \"attendeeEmail\": \"pierre.durand@example.com\"\n    },\n    {\n      \"id\": \"ticket-003\",\n      \"eventId\": \"{{testEventId}}\",\n      \"type\": \"premium\",\n      \"attendeeName\": \"Sophie Bernard\",\n      \"attendeeEmail\": \"sophie.bernard@example.com\"\n    }\n  ],\n  \"batchOptions\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true,\n    \"includeLogo\": true,\n    \"parallelGeneration\": true\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tickets/batch",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"batch"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Regenerate Ticket",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Ticket regenerated successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('ticket_id');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reason\": \"Mise à jour des informations du participant\",\n  \"regenerateQR\": true,\n  \"regeneratePDF\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tickets/{{testTicketId}}/regenerate",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"{{testTicketId}}",
+								"regenerate"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Génération complète de tickets avec QR code et PDF"
+		},
+		{
+			"name": "📄 PDF Generation",
+			"item": [
+				{
+					"name": "Generate PDF",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"PDF generated successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('pdf_url');",
+									"    pm.expect(jsonData.data).to.have.property('file_size');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ticketData\": {\n    \"id\": \"{{testTicketId}}\",\n    \"eventId\": \"{{testEventId}}\",\n    \"attendeeName\": \"Jean Dupont\",\n    \"attendeeEmail\": \"jean.dupont@example.com\"\n  },\n  \"eventData\": {\n    \"id\": \"{{testEventId}}\",\n    \"name\": \"Conférence Tech 2025\",\n    \"date\": \"2025-06-15T10:00:00Z\"\n  },\n  \"options\": {\n    \"templateId\": \"template-001\",\n    \"customFields\": {\n      \"seat_number\": \"A15\",\n      \"gate\": \"Gate B\",\n      \"special_access\": \"VIP Lounge\"\n    },\n    \"pdfOptions\": {\n      \"format\": \"A4\",\n      \"orientation\": \"portrait\",\n      \"includeWatermark\": true,\n      \"customTemplate\": false\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tickets/pdf",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"pdf"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Batch PDF",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Batch PDF generated successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('batch_id');",
+									"    pm.expect(jsonData.data).to.have.property('pdfs_generated');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tickets\": [\n    {\n      \"id\": \"ticket-001\",\n      \"eventId\": \"{{testEventId}}\",\n      \"attendeeName\": \"Marie Martin\",\n      \"attendeeEmail\": \"marie.martin@example.com\"\n    },\n    {\n      \"id\": \"ticket-002\",\n      \"eventId\": \"{{testEventId}}\",\n      \"attendeeName\": \"Pierre Durand\",\n      \"attendeeEmail\": \"pierre.durand@example.com\"\n    }\n  ],\n  \"eventData\": {\n    \"id\": \"{{testEventId}}\",\n    \"name\": \"Conférence Tech 2025\",\n    \"date\": \"2025-06-15T10:00:00Z\"\n  },\n  \"options\": {\n    \"templateId\": \"template-001\",\n    \"batchOptions\": {\n      \"format\": \"A4\",\n      \"orientation\": \"portrait\",\n      \"includeWatermark\": true\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tickets/batch-pdf",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"batch-pdf"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Ticket PDF",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Ticket PDF retrieved successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('pdf_url');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tickets/{{testTicketId}}/pdf",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"{{testTicketId}}",
+								"pdf"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Génération de PDFs pour tickets individuels et en lot"
+		},
+		{
+			"name": "📋 Ticket Information",
+			"item": [
+				{
+					"name": "Get Ticket Details",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Ticket details retrieved successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('ticket_id');",
+									"    pm.expect(jsonData.data).to.have.property('generation_status');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tickets/{{testTicketId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"{{testTicketId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Event Tickets",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Event tickets retrieved successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.be.an('array');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tickets/event/{{testEventId}}?status=generated&limit=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"event",
+								"{{testEventId}}"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "generated"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Récupération des informations sur les tickets générés"
+		},
+		{
+			"name": "🔄 Queue Management",
+			"item": [
+				{
+					"name": "Get Queue Status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Queue status retrieved successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('queue_size');",
+									"    pm.expect(jsonData.data).to.have.property('processing_rate');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/queues/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"queues",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Job Status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Job status retrieved successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"    pm.expect(jsonData.data).to.have.property('job_id');",
+									"    pm.expect(jsonData.data).to.have.property('status');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/queues/job/job-123-abc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"queues",
+								"job",
+								"job-123-abc"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Cancel Job",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Job cancelled successfully\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/queues/job/job-123-abc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"queues",
+								"job",
+								"job-123-abc"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Gestion des files d'attente et des jobs de génération"
+		}
+	]
+}
