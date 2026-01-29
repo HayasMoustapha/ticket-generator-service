@@ -362,11 +362,18 @@ class TicketQueueService {
     try {
       logger.info('🛑 Arrêt du service Redis Queue...');
 
-      // Fermeture de toutes les queues
+      // Fermeture de toutes les queues avec gestion des erreurs
+      const closePromises = [];
       for (const [name, queue] of Object.entries(this.queues)) {
-        await queue.close();
-        logger.info(`✅ Queue ${name} fermée`);
+        closePromises.push(
+          queue.close()
+            .then(() => logger.info(`✅ Queue ${name} fermée`))
+            .catch(error => logger.error(`❌ Erreur fermeture queue ${name}:`, error.message))
+        );
       }
+
+      // Attendre que toutes les queues soient fermées
+      await Promise.allSettled(closePromises);
 
       this.isInitialized = false;
       logger.info('✅ Service Redis Queue arrêté');
