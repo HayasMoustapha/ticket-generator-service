@@ -1,3 +1,4 @@
+require('dotenv').config();
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
@@ -22,8 +23,8 @@ const connection = createConnection();
  */
 class DatabaseBootstrap {
   constructor() {
-    this.migrationsPath = path.join(__dirname, '../../database/migrations');
-    this.bootstrapPath = path.join(__dirname, '../../database/bootstrap');
+    this.migrationsPath = path.join(__dirname, '../../src/database/migrations');
+    this.bootstrapPath = path.join(__dirname, '../../src/database/bootstrap');
     this.lockId = 12345;
   }
 

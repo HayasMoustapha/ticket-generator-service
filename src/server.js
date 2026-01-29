@@ -279,6 +279,13 @@ class TicketGeneratorServer {
   async start() {
     try {
       // ========================================
+      // 🚀 BOOTSTRAP DE LA BASE DE DONNÉES
+      // ========================================
+      // Initialisation de la base de données avant tout autre service
+      const bootstrap = require('./bootstrap');
+      await bootstrap.initialize();
+      
+      // ========================================
       // 🚀 INITIALISATION DU SERVICE DE GÉNÉRATION
       // ========================================
       // Initialise le service de génération de tickets (Redis, consommateur, etc.)
