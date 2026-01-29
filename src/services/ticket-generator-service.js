@@ -11,8 +11,8 @@
 - Health checks pour monitoring
  */
 
-const { startTicketGenerationConsumer } = require('./queues/ticket-generation-consumer');
-const { createRedisClient, testRedisConnection } = require('../../../../../shared/config/redis-config');
+const { startTicketGenerationConsumer } = require('../queues/ticket-generation-consumer');
+const { createRedisClient, testRedisConnection } = require('../../../shared/config/redis-config');
 
 // État du service
 let serviceState = {
@@ -20,6 +20,7 @@ let serviceState = {
   startTime: null,
   redisConnected: false,
   consumerStarted: false,
+  redisClient: null, // Ajout d'une référence au client Redis
   stats: {
     jobsProcessed: 0,
     jobsSucceeded: 0,
@@ -39,12 +40,18 @@ async function initializeTicketGeneratorService() {
     
     // Test de connexion Redis
     const redisClient = createRedisClient();
+    
+    // Connecter le client Redis (nécessaire avec Redis v5)
+    await redisClient.connect();
+    
     const redisConnected = await testRedisConnection(redisClient);
     
     if (!redisConnected) {
       throw new Error('Impossible de se connecter à Redis');
     }
     
+    // Stocker la référence au client Redis
+    serviceState.redisClient = redisClient;
     serviceState.redisConnected = true;
     console.log('[TICKET_GENERATOR_SERVICE] Connexion Redis établie');
     
@@ -77,12 +84,19 @@ async function shutdownTicketGeneratorService() {
   try {
     console.log('[TICKET_GENERATOR_SERVICE] Arrêt du service...');
     
+    // Déconnexion du client Redis si connecté
+    if (serviceState.redisClient && serviceState.redisConnected) {
+      await serviceState.redisClient.quit();
+      console.log('[TICKET_GENERATOR_SERVICE] Client Redis déconnecté');
+    }
+    
     // TODO: Arrêt gracieux du consommateur BullMQ
     // Ceci nécessiterait une référence à l'instance de la queue
     
     serviceState.isStarted = false;
     serviceState.consumerStarted = false;
     serviceState.redisConnected = false;
+    serviceState.redisClient = null;
     
     console.log('[TICKET_GENERATOR_SERVICE] Service arrêté');
     

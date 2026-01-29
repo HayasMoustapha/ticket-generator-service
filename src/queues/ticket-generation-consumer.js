@@ -16,7 +16,7 @@ const PDFDocument = require('pdfkit');
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
-const { createQueue } = require('../../../../../shared/config/redis-config');
+const { createQueue } = require('../../../shared/config/redis-config');
 
 // Configuration
 const TICKET_GENERATION_QUEUE = 'ticket_generation_queue';
