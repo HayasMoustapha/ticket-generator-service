@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document provides a comprehensive overview of all available API routes in the Ticket Generator Service. The service runs on port **3004** and provides complete ticket generation functionality with QR code generation, PDF creation, batch processing, job management, and statistics tracking.
+This document provides a comprehensive overview of all available API routes in the Ticket Generator Service. The service runs on port **3004** and provides **technical ticket generation functionality** with QR code generation, PDF creation, batch processing, and job management.
+
+**⚠️ IMPORTANT**: This is a **technical service only**. It handles file generation without business logic or user management. All business operations are delegated to `event-planner-core`.
 
 ## Base URL
 
@@ -10,13 +12,20 @@ This document provides a comprehensive overview of all available API routes in t
 http://localhost:3004/api
 ```
 
-## Authentication
+## Service Architecture
 
-All routes (except health endpoints) require JWT authentication. Include the token in the Authorization header:
+### Ticket Generator Service Responsibilities ✅
+- **QR Code Generation**: Technical QR code creation
+- **PDF Generation**: Technical PDF ticket creation
+- **Batch Processing**: Queue-based batch generation
+- **Job Management**: Generation job tracking and monitoring
+- **File Storage**: Generated file management
 
-```
-Authorization: Bearer <your_jwt_token>
-```
+### Delegated to Other Services 🔄
+- **Ticket Validation**: `scan-validation-service` (port 3005)
+- **Ticket Management**: `event-planner-core` (port 3001)
+- **User Management**: `event-planner-auth` (port 3000)
+- **Business Logic**: `event-planner-core` (port 3001)
 
 ## Modules
 
@@ -37,6 +46,8 @@ Authorization: Bearer <your_jwt_token>
 }
 ```
 
+**Note**: Only technical data required for QR generation. No user context needed.
+
 #### QR Code Formats
 - `base64` - Base64 encoded image data
 - `svg` - SVG vector format
@@ -53,31 +64,27 @@ Authorization: Bearer <your_jwt_token>
 ### 2. Ticket Generation Module
 
 #### Ticket Operations
-- `POST /api/tickets/generate` - Generate a single ticket
-- `POST /api/tickets/batch` - Generate tickets in batch
-- `POST /api/tickets/validate` - Validate a ticket
-- `GET /api/tickets/:ticketId` - Get ticket details by ID
-- `GET /api/tickets/event/:eventId` - Get tickets for an event
-- `POST /api/tickets/:ticketId/regenerate` - Regenerate a ticket
-- `DELETE /api/tickets/:ticketId` - Delete a ticket
+- `POST /api/tickets/generate` - Generate a single ticket (technical)
+- `POST /api/tickets/batch` - Generate tickets in batch (technical)
+- `GET /api/tickets/:ticketId` - Get ticket details by ID (technical)
+- `GET /api/tickets/event/:eventId` - Get tickets for an event (technical)
+- `POST /api/tickets/:ticketId/regenerate` - Regenerate a ticket (technical)
+
+**❌ DELEGATED OPERATIONS**
+- **Ticket Validation**: See `scan-validation-service` (port 3005)
+- **Ticket Deletion**: See `event-planner-core` (port 3001)
 
 #### Request Body (Generate Single Ticket)
 ```json
 {
-  "eventId": "event-1234567890abcdef",
-  "ticketType": "standard",
-  "attendeeInfo": {
-    "name": "John Doe",
-    "email": "john.doe@example.com",
-    "phone": "+33612345678",
-    "address": {
-      "street": "123 Main St",
-      "city": "Paris",
-      "country": "France",
-      "postalCode": "75001"
-    }
+  "ticketData": {
+    "id": "ticket-1234567890abcdef",
+    "eventId": "event-1234567890abcdef",
+    "type": "standard",
+    "attendeeName": "John Doe",
+    "attendeeEmail": "john.doe@example.com"
   },
-  "ticketOptions": {
+  "options": {
     "qrFormat": "base64",
     "qrSize": "medium",
     "pdfFormat": true,
@@ -90,35 +97,36 @@ Authorization: Bearer <your_jwt_token>
 }
 ```
 
+**Note**: Only technical data required for generation. No user context or business logic.
+
 #### Request Body (Batch Generation)
 ```json
 {
-  "eventId": "event-1234567890abcdef",
   "tickets": [
     {
-      "ticketType": "standard",
-      "attendeeInfo": {
-        "name": "John Doe",
-        "email": "john.doe@example.com",
-        "phone": "+33612345678"
-      }
+      "id": "ticket-1234567890abcdef",
+      "eventId": "event-1234567890abcdef",
+      "type": "standard",
+      "attendeeName": "John Doe",
+      "attendeeEmail": "john.doe@example.com"
     },
     {
-      "ticketType": "vip",
-      "attendeeInfo": {
-        "name": "Jane Smith",
-        "email": "jane.smith@example.com",
-        "phone": "+33698765432"
-      }
+      "id": "ticket-1234567890abcdef2",
+      "eventId": "event-1234567890abcdef",
+      "type": "vip",
+      "attendeeName": "Jane Smith",
+      "attendeeEmail": "jane.smith@example.com"
     }
   ],
-  "ticketOptions": {
+  "batchOptions": {
     "qrFormat": "base64",
     "qrSize": "medium",
     "pdfFormat": true
   }
 }
 ```
+
+**Note**: Technical batch processing without user context.
 
 #### Query Parameters (Get Event Tickets)
 - `page` - Page number (default: 1)
@@ -137,8 +145,17 @@ Authorization: Bearer <your_jwt_token>
 #### Request Body (Generate PDF)
 ```json
 {
-  "ticketId": "ticket-1234567890abcdef",
-  "templateId": "template-1234567890abcdef",
+  "ticketData": {
+    "id": "ticket-1234567890abcdef",
+    "eventId": "event-1234567890abcdef",
+    "attendeeName": "John Doe",
+    "attendeeEmail": "john.doe@example.com"
+  },
+  "eventData": {
+    "id": "event-1234567890abcdef",
+    "name": "Tech Conference 2026",
+    "date": "2026-03-15T09:00:00Z"
+  },
   "options": {
     "format": "base64",
     "includeQR": true,
@@ -151,6 +168,8 @@ Authorization: Bearer <your_jwt_token>
 }
 ```
 
+**Note**: Technical PDF generation with display data only.
+
 #### PDF Options
 - `format` - Output format: base64, binary
 - `includeQR` - Include QR code in PDF
@@ -159,54 +178,11 @@ Authorization: Bearer <your_jwt_token>
 
 ---
 
-### 4. Job Management Module
+### 5. Queue Monitoring Module
 
-#### Job Operations
-- `POST /api/tickets/jobs` - Create a ticket generation job
-- `GET /api/tickets/job/:jobId/status` - Get job status
-- `POST /api/tickets/jobs/:jobId/process` - Process a specific job
-- `DELETE /api/tickets/job/:jobId/cancel` - Cancel a job
-- `GET /api/tickets/jobs` - List jobs with filters
-
-#### Request Body (Create Job)
-```json
-{
-  "jobType": "batch_generation",
-  "parameters": {
-    "eventId": "event-1234567890abcdef",
-    "ticketCount": 100,
-    "ticketType": "standard"
-  },
-  "priority": "normal"
-}
-```
-
-#### Job Types
-- `batch_generation` - Generate multiple tickets
-- `pdf_generation` - Generate PDFs for existing tickets
-- `qr_regeneration` - Regenerate QR codes
-- `template_migration` - Apply new template to tickets
-
-#### Job Status Values
-- `pending` - Job queued but not started
-- `processing` - Job currently running
-- `completed` - Job finished successfully
-- `failed` - Job failed with errors
-- `cancelled` - Job was cancelled
-
-#### Query Parameters (List Jobs)
-- `page` - Page number (default: 1)
-- `limit` - Items per page (default: 20)
-- `status` - Filter by job status
-- `jobType` - Filter by job type
-
----
-
-### 5. Statistics & Monitoring Module
-
-#### Statistics Operations
-- `GET /api/tickets/queue/stats` - Get queue processing statistics
-- `GET /api/tickets/events/:eventId/stats` - Get ticket statistics for an event
+#### Queue Operations
+- `GET /api/queues/stats` - Get queue processing statistics
+- `GET /api/queues/health` - Check queue service health
 
 #### Queue Statistics Response
 ```json
@@ -245,26 +221,30 @@ Authorization: Bearer <your_jwt_token>
 
 #### Health Operations
 - `GET /health` - Basic health check (no authentication required)
-- `GET /api/tickets` - Get API information (no authentication required)
+- `GET /api` - API information (no authentication required)
 
 ---
 
-## Ticket Generation Flow
+## 🎯 Service Communication
 
-### Single Ticket Generation
-1. `POST /api/tickets/generate` - Generate ticket with QR code
-2. `POST /api/tickets/pdf` - Generate PDF (optional)
-3. `GET /api/tickets/:ticketId` - Get ticket details
+### Input Data (Technical Only)
+- **Ticket Generation**: Technical ticket data + display options
+- **QR Generation**: Technical QR parameters
+- **PDF Generation**: Technical PDF parameters + display data
+- **Batch Processing**: Array of technical data
 
-### Batch Ticket Generation
-1. `POST /api/tickets/jobs` - Create batch job
-2. `GET /api/tickets/job/:jobId/status` - Monitor progress
-3. `GET /api/tickets/event/:eventId` - Get generated tickets
+### Output Data (Files + Status)
+- **Generated Files**: QR codes, PDFs in requested format
+- **Status Information**: Generation progress, job status
+- **Technical Metadata**: File paths, generation timestamps
 
-### Ticket Regeneration
-1. `POST /api/tickets/:ticketId/regenerate` - Regenerate with new options
-2. `GET /api/tickets/:ticketId/qr` - Get new QR code
-3. `GET /api/tickets/:ticketId/pdf` - Get new PDF
+### No Business Logic
+- ❌ No user authentication
+- ❌ No permission checking  
+- ❌ No business validation
+- ❌ No user context storage
+
+---
 
 ## Error Responses
 
@@ -295,24 +275,11 @@ Most endpoints return consistent success responses:
 
 ## Rate Limiting
 
-API endpoints may be rate limited. Check response headers for rate limit information.
-
-## Permissions
-
-All endpoints require specific permissions. Permission format: `module.action` (e.g., `tickets.create`, `tickets.jobs.read`).
-
-## Webhooks
-
-The service supports webhooks for:
-- Job completion notifications
-- Batch generation progress updates
-- Error notifications for failed jobs
-
-Configure webhooks in the service configuration.
+API endpoints may be rate limited for technical protection. Check response headers for rate limit information.
 
 ## Postman Collection
 
-A complete Postman collection with all 20 routes is available in:
+A complete Postman collection with all 12 routes is available in:
 - `postman/ticket-generator-service.postman_collection.json`
 
 ## Environment Variables
@@ -322,6 +289,27 @@ Required environment variables are defined in:
 
 ---
 
-**Last Updated:** January 27, 2026  
-**Version:** 3.0.0  
-**Total Routes:** 20
+**Last Updated:** January 29, 2026  
+**Version:** 3.1.0  
+**Total Routes:** 12 (reduced from 20 after refactoring)
+
+## 🎯 Refactoring Summary
+
+### Removed Routes (8 routes deleted)
+- **Ticket Validation** (1 route): Delegated to `scan-validation-service`
+- **Ticket Deletion** (1 route): Delegated to `event-planner-core`
+- **Job Management** (4 routes): Simplified to direct generation
+- **Statistics** (2 routes): Delegated to core business logic
+
+### Architecture Benefits
+- ✅ **Technical Only**: Pure file generation without business logic
+- ✅ **No User Context**: Service works with technical data only
+- ✅ **Clean Dependencies**: No authentication or authorization
+- ✅ **Simplified API**: Direct generation without job complexity
+- ✅ **Better Isolation**: Technical service with clear boundaries
+
+### Service Communication
+- **Input**: Technical generation data from `event-planner-core`
+- **Output**: Generated files + status information
+- **No Business Logic**: Pure technical execution
+- **Stateless**: Each request independent
