@@ -14,6 +14,8 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 // Morgan : Middleware pour logger les requêtes HTTP
 const morgan = require('morgan');
+// Helmet : Middleware pour sécuriser les en-têtes HTTP
+const helmet = require('helmet');
 
 // Logger personnalisé pour le service
 const logger = require('./utils/logger');
@@ -51,13 +53,19 @@ class TicketGeneratorServer {
    */
   setupMiddleware() {
     // ========================================
+    // 🛡️ SÉCURITÉ DES EN-TÊTES HTTP (Helmet)
+    // ========================================
+    // Configure les en-têtes de sécurité (CSP, X-Frame-Options, etc.)
+    this.app.use(helmet());
+
+    // ========================================
     // 🔓 CONFIGURATION CORS (Cross-Origin Resource Sharing)
     // ========================================
-    // Permet à toutes les origines d'accéder à l'API (mode technique)
+    // Restreint les origines au Core Service uniquement
     this.app.use(cors({
-      origin: '*',  // Accepte toutes les origines
+      origin: process.env.CORS_ORIGIN || 'http://localhost:3001',  // Core Service uniquement
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Méthodes HTTP autorisées
-      allowedHeaders: ['Content-Type']  // En-têtes autorisés
+      allowedHeaders: ['Content-Type', 'X-API-Key']  // En-têtes autorisés
     }));
 
     // ========================================
