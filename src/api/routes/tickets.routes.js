@@ -36,28 +36,20 @@ const generateQRCodeSchema = Joi.object({
 });
 
 // Schéma pour valider la demande de génération de ticket complet
+// NOTE : Service technique - pas de logique utilisateur, seulement données de génération
 const generateTicketSchema = Joi.object({
-  // ticketData : Informations principales du ticket (obligatoire)
+  // ticketData : Informations techniques du ticket (obligatoire)
   ticketData: Joi.object({
     // id : Identifiant unique du ticket (obligatoire)
     id: Joi.string().required(),
     // eventId : Identifiant de l'événement (obligatoire)
     eventId: Joi.string().required(),
-    // userId : Identifiant de l'utilisateur (obligatoire)
-    userId: Joi.string().required(),
     // type : Type de ticket (standard, vip, premium, staff) - par défaut standard
     type: Joi.string().valid('standard', 'vip', 'premium', 'staff').default('standard'),
-    // attendeeInfo : Informations du participant (obligatoire)
-    attendeeInfo: Joi.object({
-      // name : Nom du participant (obligatoire)
-      name: Joi.string().required(),
-      // email : Email du participant (obligatoire et doit être valide)
-      email: Joi.string().email().required(),
-      // phone : Téléphone du participant (optionnel)
-      phone: Joi.string().optional(),
-      // address : Adresse du participant (optionnel)
-      address: Joi.object().optional()
-    }).required()
+    // attendeeName : Nom du participant pour affichage (obligatoire)
+    attendeeName: Joi.string().required(),
+    // attendeeEmail : Email pour affichage (obligatoire)
+    attendeeEmail: Joi.string().email().required()
   }).required(),
   // options : Options de génération (optionnel)
   options: Joi.object({
@@ -75,6 +67,7 @@ const generateTicketSchema = Joi.object({
 });
 
 // Schéma pour valider la demande de génération de tickets en lot
+// NOTE : Service technique - seulement données nécessaires pour la génération
 const generateBatchSchema = Joi.object({
   // tickets : Liste des tickets à générer (obligatoire, entre 1 et 100 tickets)
   tickets: Joi.array().items(
@@ -83,21 +76,12 @@ const generateBatchSchema = Joi.object({
       id: Joi.string().required(),
       // eventId : Identifiant de l'événement (obligatoire)
       eventId: Joi.string().required(),
-      // userId : Identifiant de l'utilisateur (obligatoire)
-      userId: Joi.string().required(),
       // type : Type de ticket (standard, vip, premium, staff) - par défaut standard
       type: Joi.string().valid('standard', 'vip', 'premium', 'staff').default('standard'),
-      // attendeeInfo : Informations du participant (obligatoire)
-      attendeeInfo: Joi.object({
-        // name : Nom du participant (obligatoire)
-        name: Joi.string().required(),
-        // email : Email du participant (obligatoire et doit être valide)
-        email: Joi.string().email().required(),
-        // phone : Téléphone du participant (optionnel)
-        phone: Joi.string().optional(),
-        // address : Adresse du participant (optionnel)
-        address: Joi.object().optional()
-      }).required()
+      // attendeeName : Nom du participant pour affichage (obligatoire)
+      attendeeName: Joi.string().required(),
+      // attendeeEmail : Email pour affichage (obligatoire)
+      attendeeEmail: Joi.string().email().required()
     })
   ).min(1).max(100).required(),
   // batchOptions : Options pour la génération en lot (optionnel)
@@ -116,17 +100,20 @@ const generateBatchSchema = Joi.object({
 });
 
 // Schéma pour valider la demande de génération de PDF
+// NOTE : Service technique - seulement données nécessaires pour la génération PDF
 const generatePDFSchema = Joi.object({
-  // ticketData : Informations du ticket (obligatoire)
+  // ticketData : Informations techniques du ticket (obligatoire)
   ticketData: Joi.object({
     // id : Identifiant du ticket (obligatoire)
     id: Joi.string().required(),
     // eventId : Identifiant de l'événement (obligatoire)
     eventId: Joi.string().required(),
-    // userId : Identifiant de l'utilisateur (obligatoire)
-    userId: Joi.string().required()
+    // attendeeName : Nom du participant pour affichage (obligatoire)
+    attendeeName: Joi.string().required(),
+    // attendeeEmail : Email pour affichage (obligatoire)
+    attendeeEmail: Joi.string().email().required()
   }).required(),
-  // eventData : Informations de l'événement (obligatoire)
+  // eventData : Informations de l'événement pour affichage (obligatoire)
   eventData: Joi.object({
     // id : Identifiant de l'événement (obligatoire)
     id: Joi.string().required(),
@@ -134,15 +121,6 @@ const generatePDFSchema = Joi.object({
     name: Joi.string().required(),
     // date : Date de l'événement (obligatoire)
     date: Joi.string().required()
-  }).required(),
-  // userData : Informations de l'utilisateur (obligatoire)
-  userData: Joi.object({
-    // id : Identifiant de l'utilisateur (obligatoire)
-    id: Joi.string().required(),
-    // name : Nom de l'utilisateur (obligatoire)
-    name: Joi.string().required(),
-    // email : Email de l'utilisateur (obligatoire et doit être valide)
-    email: Joi.string().email().required()
   }).required(),
   // options : Options de génération PDF (optionnel)
   options: Joi.object({
@@ -165,6 +143,7 @@ const generatePDFSchema = Joi.object({
 });
 
 // Schéma pour valider la demande de génération de PDFs en lot
+// NOTE : Service technique - seulement données nécessaires pour la génération PDF
 const generateBatchPDFSchema = Joi.object({
   // tickets : Liste des tickets pour lesquels générer des PDFs (obligatoire, entre 1 et 50)
   tickets: Joi.array().items(
@@ -173,11 +152,13 @@ const generateBatchPDFSchema = Joi.object({
       id: Joi.string().required(),
       // eventId : Identifiant de l'événement (obligatoire)
       eventId: Joi.string().required(),
-      // userId : Identifiant de l'utilisateur (obligatoire)
-      userId: Joi.string().required()
+      // attendeeName : Nom du participant pour affichage (obligatoire)
+      attendeeName: Joi.string().required(),
+      // attendeeEmail : Email pour affichage (obligatoire)
+      attendeeEmail: Joi.string().email().required()
     })
   ).min(1).max(50).required(),
-  // eventData : Informations de l'événement (obligatoire)
+  // eventData : Informations de l'événement pour affichage (obligatoire)
   eventData: Joi.object({
     // id : Identifiant de l'événement (obligatoire)
     id: Joi.string().required(),
