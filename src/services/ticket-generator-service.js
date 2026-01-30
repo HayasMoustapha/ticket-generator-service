@@ -13,6 +13,7 @@
 
 const { startTicketGenerationConsumer } = require('../queues/ticket-generation-consumer');
 const { createRedisClient, testRedisConnection } = require('../../../shared/config/redis-config');
+const ticketQueueService = require('../core/queue/ticket-queue.service');
 
 // État du service
 let serviceState = {
@@ -37,6 +38,10 @@ let serviceState = {
 async function initializeTicketGeneratorService() {
   try {
     console.log('[TICKET_GENERATOR_SERVICE] Initialisation du service...');
+    
+    // Initialiser le service de queue Redis
+    await ticketQueueService.initialize();
+    console.log('[TICKET_GENERATOR_SERVICE] Service Redis Queue initialisé');
     
     // Test de connexion Redis
     const redisClient = createRedisClient();
@@ -90,8 +95,11 @@ async function shutdownTicketGeneratorService() {
       console.log('[TICKET_GENERATOR_SERVICE] Client Redis déconnecté');
     }
     
-    // TODO: Arrêt gracieux du consommateur BullMQ
-    // Ceci nécessiterait une référence à l'instance de la queue
+    // Arrêt du service de queue
+    if (ticketQueueService.isInitialized) {
+      await ticketQueueService.shutdown();
+      console.log('[TICKET_GENERATOR_SERVICE] Service Redis Queue arrêté');
+    }
     
     serviceState.isStarted = false;
     serviceState.consumerStarted = false;

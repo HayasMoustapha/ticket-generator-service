@@ -16,7 +16,7 @@ const PDFDocument = require('pdfkit');
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs').promises;
-const { createQueue } = require('../core/queue/ticket-queue.service');
+const ticketQueueService = require('../core/queue/ticket-queue.service');
 const ticketWebhookService = require('../core/webhooks/ticket-webhook.service');
 
 // Configuration
@@ -395,9 +395,7 @@ async function processTicketGenerationJob(job) {
  */
 async function emitGenerationResult(result) {
   try {
-    const resultQueue = createQueue(TICKET_GENERATION_RESULT_QUEUE);
-    
-    await resultQueue.add('generation-result', result, {
+    await ticketQueueService.queues.ticketGenerated.add('generation-result', result, {
       priority: 1,
       attempts: 5,
       backoff: {
@@ -418,7 +416,7 @@ async function emitGenerationResult(result) {
  * Démarre le consommateur de tickets
  */
 function startTicketGenerationConsumer() {
-  const queue = createQueue(TICKET_GENERATION_QUEUE);
+  const queue = ticketQueueService.queues.ticketGeneration;
   
   console.log('[TICKET_CONSUMER] Démarrage consommateur de génération de billets');
   
