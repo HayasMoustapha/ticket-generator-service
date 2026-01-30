@@ -413,4 +413,9 @@ if (require.main === module) {
   });
 }
 
+// Export de la classe pour utilisation directe
 module.exports = TicketGeneratorServer;
+
+// Export de l'app Express pour les tests
+const testServerInstance = new TicketGeneratorServer();
+module.exports.app = testServerInstance.app;
