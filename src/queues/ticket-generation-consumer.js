@@ -329,14 +329,14 @@ async function processTicketGenerationJob(job) {
       summary: {
         total: data.tickets.length,
         successful: successCount,
-        failed: failedCount,
+        failed: failureCount,
         processingTime: processingTime
       }
     };
 
     // Envoyer le webhook selon le résultat
     let webhookResult;
-    if (failedCount === 0) {
+    if (failureCount === 0) {
       // Succès complet
       webhookResult = await ticketWebhookService.sendGenerationCompleted(data.job_id, webhookData);
     } else if (successCount === 0) {
