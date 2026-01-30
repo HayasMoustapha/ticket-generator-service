@@ -41,6 +41,8 @@ const helmet = require('helmet');
 // Import des services et routes internes
 const logger = require('./utils/logger');
 const healthRoutes = require('./routes/health-routes');
+const ticketsRoutes = require('./api/routes/tickets.routes');
+const queuesRoutes = require('./api/routes/queues.routes');
 const { initializeTicketGeneratorService, shutdownTicketGeneratorService } = require('./services/ticket-generator-service');
 
 /**
@@ -174,7 +176,13 @@ class TicketGeneratorServer {
       });
     });
 
-    // � ROUTE 404 - Gestion des routes non trouvées
+    // 🎫 ROUTES TICKETS - Génération de tickets
+    this.app.use('/api/tickets', ticketsRoutes);
+
+    // 📋 ROUTES QUEUES - Gestion des files d'attente
+    this.app.use('/api/queues', queuesRoutes);
+
+    // 🚫 ROUTE 404 - Gestion des routes non trouvées
     // Route par défaut pour les URLs qui n'existent pas
     this.app.use((req, res) => {
       res.status(404).json({
