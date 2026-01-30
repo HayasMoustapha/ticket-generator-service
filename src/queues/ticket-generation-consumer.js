@@ -14,9 +14,10 @@
 const QRCode = require('qrcode');
 const PDFDocument = require('pdfkit');
 const sharp = require('sharp');
-const fs = require('fs').promises;
 const path = require('path');
-const { createQueue } = require('../../../shared/config/redis-config');
+const fs = require('fs').promises;
+const { createQueue } = require('../core/queue/ticket-queue.service');
+const ticketWebhookService = require('../core/webhooks/ticket-webhook.service');
 
 // Configuration
 const TICKET_GENERATION_QUEUE = 'ticket_generation_queue';
@@ -312,7 +313,44 @@ async function processTicketGenerationJob(job) {
       processed_at: new Date().toISOString()
     };
     
-    // Émission du résultat vers event-planner-core
+    // Préparer les données du webhook avec gestion des succès/échecs
+    const webhookTickets = results.map(ticket => ({
+      ticketId: ticket.ticket_id,
+      ticketCode: ticket.ticket_code,
+      qrCodeData: ticket.qr_code_data,
+      fileUrl: ticket.file_url,
+      filePath: ticket.file_path,
+      generatedAt: ticket.generated_at,
+      success: ticket.status === 'completed'
+    }));
+
+    const webhookData = {
+      tickets: webhookTickets,
+      summary: {
+        total: data.tickets.length,
+        successful: successCount,
+        failed: failedCount,
+        processingTime: processingTime
+      }
+    };
+
+    // Envoyer le webhook selon le résultat
+    let webhookResult;
+    if (failedCount === 0) {
+      // Succès complet
+      webhookResult = await ticketWebhookService.sendGenerationCompleted(data.job_id, webhookData);
+    } else if (successCount === 0) {
+      // Échec complet
+      webhookResult = await ticketWebhookService.sendGenerationFailed(data.job_id, {
+        ...webhookData,
+        error: 'Tous les tickets ont échoué'
+      });
+    } else {
+      // Succès partiel
+      webhookResult = await ticketWebhookService.sendGenerationPartial(data.job_id, webhookData);
+    }
+    
+    // Garder l'émission Redis pour compatibilité (deprecated)
     await emitGenerationResult(resultMessage);
     
     return resultMessage;
@@ -328,7 +366,22 @@ async function processTicketGenerationJob(job) {
       processed_at: new Date().toISOString()
     };
     
-    // Émission de l'erreur vers event-planner-core
+    // Émission de l'erreur vers event-planner-core via webhook HTTP
+    const errorWebhookData = {
+      tickets: [], // Pas de tickets générés en cas d'erreur critique
+      error: error.message,
+      summary: {
+        total: data.tickets?.length || 0,
+        successful: 0,
+        failed: data.tickets?.length || 0,
+        processingTime: 0
+      }
+    };
+
+    // Envoyer le webhook d'erreur
+    await ticketWebhookService.sendGenerationFailed(data.job_id, errorWebhookData);
+    
+    // Garder l'émission Redis pour compatibilité (deprecated)
     await emitGenerationResult(errorMessage);
     
     throw error;
