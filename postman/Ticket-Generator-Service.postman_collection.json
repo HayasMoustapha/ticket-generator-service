@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "ticket-generator-service-collection",
 		"name": "Ticket Generator Service - Technical API",
-		"description": "Collection complète pour Ticket Generator Service (Port 3004). Service technique de génération QR/PDF.\n\n🔥 RÈGLE STRICTE: Service technique - PAS d'authentification utilisateur.\nLes bodies ne contiennent QUE les champs réels des schémas SQL.\n❌ INTERDITS: id, created_at, updated_at (gérés automatiquement)",
+		"description": "Collection complète pour Ticket Generator Service (Port 3004). Service technique de génération QR/PDF.\n\n🔥 RÈGLE STRICTE: Service technique - PAS d'authentification utilisateur.\nLes bodies sont basés sur les tests manuels validés (14/14 succès).\n✅ Tous les endpoints testés et fonctionnels",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -24,7 +24,87 @@
 	],
 	"item": [
 		{
-			"name": "🎫 QR Code Generation",
+			"name": "� Health & Service Info",
+			"item": [
+				{
+					"name": "Health Check",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Service is healthy\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"healthy\");",
+									"    pm.expect(jsonData.service).to.eql(\"ticket-generator\");",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tickets/health",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets",
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Service Info",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Service info retrieved\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.service).to.exist;",
+									"    pm.expect(jsonData.version).to.exist;",
+									"    pm.expect(jsonData.endpoints).to.exist;",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tickets",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tickets"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Vérification de santé et informations du service"
+		},
+		{
+			"name": "�🎫 QR Code Generation",
 			"item": [
 				{
 					"name": "Generate QR Code",
@@ -58,7 +138,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"ticketCode\": \"TKT-001-ABC123\",\n  \"ticketId\": \"{{testTicketId}}\",\n  \"eventId\": \"{{testEventId}}\",\n  \"format\": \"base64\",\n  \"size\": \"medium\"\n}"
+							"raw": "{\n  \"ticketCode\": \"TICKET-CODE-123456\",\n  \"ticketId\": \"{{testTicketId}}\",\n  \"eventId\": \"{{testEventId}}\",\n  \"format\": \"base64\",\n  \"size\": \"medium\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/tickets/qr/generate",
@@ -151,7 +231,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"ticketData\": {\n    \"id\": \"{{testTicketId}}\",\n    \"eventId\": \"{{testEventId}}\",\n    \"type\": \"vip\",\n    \"attendeeName\": \"Jean Dupont\",\n    \"attendeeEmail\": \"jean.dupont@example.com\"\n  },\n  \"options\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true,\n    \"includeLogo\": false,\n    \"customFields\": {\n      \"seat_number\": \"A15\",\n      \"gate\": \"Gate B\"\n    }\n  }\n}"
+							"raw": "{\n  \"ticketData\": {\n    \"id\": \"{{testTicketId}}\",\n    \"eventId\": \"{{testEventId}}\",\n    \"userId\": \"USER-456\",\n    \"type\": \"standard\",\n    \"attendeeName\": \"Jean Dupont\",\n    \"attendeeEmail\": \"jean.dupont@email.com\",\n    \"attendeePhone\": \"+33612345678\",\n    \"eventTitle\": \"Conférence Tech 2024\",\n    \"eventDate\": \"2024-06-15T10:00:00Z\",\n    \"location\": \"Paris, La Défense\"\n  },\n  \"options\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true,\n    \"includeLogo\": false\n  }\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/tickets/generate",
@@ -198,7 +278,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"tickets\": [\n    {\n      \"id\": \"ticket-001\",\n      \"eventId\": \"{{testEventId}}\",\n      \"type\": \"standard\",\n      \"attendeeName\": \"Marie Martin\",\n      \"attendeeEmail\": \"marie.martin@example.com\"\n    },\n    {\n      \"id\": \"ticket-002\",\n      \"eventId\": \"{{testEventId}}\",\n      \"type\": \"vip\",\n      \"attendeeName\": \"Pierre Durand\",\n      \"attendeeEmail\": \"pierre.durand@example.com\"\n    },\n    {\n      \"id\": \"ticket-003\",\n      \"eventId\": \"{{testEventId}}\",\n      \"type\": \"premium\",\n      \"attendeeName\": \"Sophie Bernard\",\n      \"attendeeEmail\": \"sophie.bernard@example.com\"\n    }\n  ],\n  \"batchOptions\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true,\n    \"includeLogo\": true,\n    \"parallelGeneration\": true\n  }\n}"
+							"raw": "{\n  \"tickets\": [\n    {\n      \"id\": \"TICKET-BATCH-001\",\n      \"eventId\": \"{{testEventId}}\",\n      \"type\": \"standard\",\n      \"attendeeName\": \"Alice Martin\",\n      \"attendeeEmail\": \"alice@email.com\"\n    },\n    {\n      \"id\": \"TICKET-BATCH-002\",\n      \"eventId\": \"{{testEventId}}\",\n      \"type\": \"vip\",\n      \"attendeeName\": \"Bob Bernard\",\n      \"attendeeEmail\": \"bob@email.com\"\n    },\n    {\n      \"id\": \"TICKET-BATCH-003\",\n      \"eventId\": \"{{testEventId}}\",\n      \"type\": \"premium\",\n      \"attendeeName\": \"Caroline Petit\",\n      \"attendeeEmail\": \"caroline@email.com\"\n    }\n  ],\n  \"batchOptions\": {\n    \"qrFormat\": \"base64\",\n    \"qrSize\": \"medium\",\n    \"pdfFormat\": true,\n    \"includeLogo\": false,\n    \"parallelGeneration\": true\n  }\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/tickets/batch",
@@ -244,7 +324,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"reason\": \"Mise à jour des informations du participant\",\n  \"regenerateQR\": true,\n  \"regeneratePDF\": true\n}"
+							"raw": "{\n  \"reason\": \"Test de régénération\",\n  \"regenerateQR\": true,\n  \"regeneratePDF\": true\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/tickets/{{testTicketId}}/regenerate",
@@ -298,7 +378,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"ticketData\": {\n    \"id\": \"{{testTicketId}}\",\n    \"eventId\": \"{{testEventId}}\",\n    \"attendeeName\": \"Jean Dupont\",\n    \"attendeeEmail\": \"jean.dupont@example.com\"\n  },\n  \"eventData\": {\n    \"id\": \"{{testEventId}}\",\n    \"name\": \"Conférence Tech 2025\",\n    \"date\": \"2025-06-15T10:00:00Z\"\n  },\n  \"options\": {\n    \"templateId\": \"template-001\",\n    \"customFields\": {\n      \"seat_number\": \"A15\",\n      \"gate\": \"Gate B\",\n      \"special_access\": \"VIP Lounge\"\n    },\n    \"pdfOptions\": {\n      \"format\": \"A4\",\n      \"orientation\": \"portrait\",\n      \"includeWatermark\": true,\n      \"customTemplate\": false\n    }\n  }\n}"
+							"raw": "{\n  \"ticketData\": {\n    \"id\": \"{{testTicketId}}\",\n    \"eventId\": \"{{testEventId}}\",\n    \"attendeeName\": \"David Durand\",\n    \"attendeeEmail\": \"david@email.com\"\n  },\n  \"eventData\": {\n    \"id\": \"{{testEventId}}\",\n    \"name\": \"Conférence Tech 2024\",\n    \"date\": \"2024-06-15T10:00:00Z\"\n  },\n  \"userData\": {\n    \"first_name\": \"David\",\n    \"last_name\": \"Durand\",\n    \"email\": \"david@email.com\",\n    \"phone\": \"+33612345678\"\n  },\n  \"options\": {\n    \"templateId\": \"default\",\n    \"pdfOptions\": {\n      \"format\": \"A4\",\n      \"orientation\": \"portrait\",\n      \"includeWatermark\": false,\n      \"customTemplate\": false\n    }\n  }\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/tickets/pdf",
@@ -345,7 +425,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"tickets\": [\n    {\n      \"id\": \"ticket-001\",\n      \"eventId\": \"{{testEventId}}\",\n      \"attendeeName\": \"Marie Martin\",\n      \"attendeeEmail\": \"marie.martin@example.com\"\n    },\n    {\n      \"id\": \"ticket-002\",\n      \"eventId\": \"{{testEventId}}\",\n      \"attendeeName\": \"Pierre Durand\",\n      \"attendeeEmail\": \"pierre.durand@example.com\"\n    }\n  ],\n  \"eventData\": {\n    \"id\": \"{{testEventId}}\",\n    \"name\": \"Conférence Tech 2025\",\n    \"date\": \"2025-06-15T10:00:00Z\"\n  },\n  \"options\": {\n    \"templateId\": \"template-001\",\n    \"batchOptions\": {\n      \"format\": \"A4\",\n      \"orientation\": \"portrait\",\n      \"includeWatermark\": true\n    }\n  }\n}"
+							"raw": "{\n  \"tickets\": [\n    {\n      \"id\": \"TICKET-BATCHPDF-001\",\n      \"eventId\": \"{{testEventId}}\",\n      \"attendeeName\": \"Eva Lemoine\",\n      \"attendeeEmail\": \"eva@email.com\"\n    },\n    {\n      \"id\": \"TICKET-BATCHPDF-002\",\n      \"eventId\": \"{{testEventId}}\",\n      \"attendeeName\": \"François Moreau\",\n      \"attendeeEmail\": \"francois@email.com\"\n    }\n  ],\n  \"eventData\": {\n    \"id\": \"{{testEventId}}\",\n    \"name\": \"Conférence Tech 2024\",\n    \"date\": \"2024-06-15T10:00:00Z\"\n  },\n  \"options\": {\n    \"batchOptions\": {\n      \"format\": \"A4\",\n      \"orientation\": \"portrait\",\n      \"includeWatermark\": false\n    }\n  }\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/tickets/batch-pdf",
