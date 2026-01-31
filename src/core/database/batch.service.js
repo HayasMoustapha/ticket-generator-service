@@ -705,6 +705,120 @@ class BatchService {
   }
 
   /**
+   * Génère des tickets en lot (méthode directe)
+   * @param {Array} tickets - Liste des tickets à générer
+   * @param {Object} options - Options de génération
+   * @returns {Promise<Object>} Résultat de la génération
+   */
+  async generateBatchTickets(tickets, options = {}) {
+    try {
+      const results = [];
+      
+      // Importer le service QR code
+      const qrCodeService = require('../qrcode/qrcode.service');
+      
+      for (const ticket of tickets) {
+        try {
+          // Préparer les données pour le QR code
+          const qrData = {
+            id: ticket.id,
+            eventId: ticket.eventId,
+            code: `${ticket.id}-${ticket.eventId}`,
+            type: 'TICKET'
+          };
+          
+          const qrOptions = {
+            format: options.qrFormat || 'base64',
+            size: options.qrSize || 'medium',
+            includeLogo: options.includeLogo || false,
+            errorCorrection: 'M'
+          };
+          
+          const result = await qrCodeService.generateTicketQRCode(qrData, qrOptions);
+          results.push({
+            ticketId: ticket.id,
+            success: result.success,
+            qrCode: result.success ? result.qrCode : null,
+            checksum: result.success ? result.signature : null,
+            error: result.success ? null : result.error
+          });
+        } catch (error) {
+          results.push({
+            ticketId: ticket.id,
+            success: false,
+            qrCode: null,
+            checksum: null,
+            error: error.message
+          });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      
+      return {
+        success: true,
+        data: {
+          batchId: this.generateJobId(),
+          results,
+          processed: tickets.length,
+          successCount,
+          failureCount: tickets.length - successCount,
+          processedAt: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      logger.error('Failed to generate batch tickets', {
+        ticketsCount: tickets.length,
+        error: error.message
+      });
+      
+      return {
+        success: false,
+        error: `Échec de génération en lot: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Génère des PDFs en lot (méthode directe)
+   * @param {Array} tickets - Liste des tickets
+   * @param {Object} eventData - Données de l'événement
+   * @param {Object} options - Options de génération
+   * @returns {Promise<Object>} Résultat de la génération
+   */
+  async generateBatchPDFs(tickets, eventData, options = {}) {
+    try {
+      // Importer le service PDF
+      const pdfService = require('../pdf/pdf.service');
+      
+      const result = await pdfService.generateBatchPDF(tickets, eventData, options);
+      
+      return {
+        success: result.success,
+        data: {
+          batchId: this.generateJobId(),
+          pdfBase64: result.success ? result.pdfBase64 : null,
+          filename: result.success ? result.filename : null,
+          ticketsCount: tickets.length,
+          error: result.success ? null : result.error,
+          processedAt: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      logger.error('Failed to generate batch PDFs', {
+        ticketsCount: tickets.length,
+        eventId: eventData.id,
+        error: error.message
+      });
+      
+      return {
+        success: false,
+        error: `Échec de génération PDF batch: ${error.message}`
+      };
+    }
+  }
+
+  /**
    * Récupère les détails d'un ticket
    * @param {string} ticketId - ID du ticket
    * @returns {Promise<Object>} Détails du ticket

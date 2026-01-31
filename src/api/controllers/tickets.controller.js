@@ -121,8 +121,24 @@ class TicketsController {
         );
       }
 
+      // Préparer les données pour le service QR
+      const qrDataForService = {
+        id: ticketData.id,
+        eventId: ticketData.eventId,
+        code: `${ticketData.id}-${ticketData.eventId}`, // Générer un code unique
+        type: 'TICKET'
+      };
+
+      // Préparer les options QR
+      const qrOptions = {
+        format: options.qrFormat || 'base64',
+        size: options.qrSize || 'medium',
+        includeLogo: options.includeLogo || false,
+        errorCorrection: 'M'
+      };
+
       // Générer le QR code pour le ticket
-      const qrResult = await qrCodeService.generateTicketQRCode(ticketData, options.qrOptions);
+      const qrResult = await qrCodeService.generateTicketQRCode(qrDataForService, qrOptions);
       
       // Vérification si la génération du QR code a échoué
       if (!qrResult.success) {
@@ -131,21 +147,74 @@ class TicketsController {
         );
       }
 
+      // Initialiser le résultat de génération
+      const generationResult = {
+        ticketId: ticketData.id,
+        qrCodeData: qrResult.qrCode,
+        checksum: qrResult.signature,
+        generatedAt: qrResult.generatedAt
+      };
+
+      // Générer le PDF si demandé
+      if (options.pdfFormat !== false) {
+        try {
+          // Préparer les données pour le service PDF
+          const eventData = {
+            id: ticketData.eventId,
+            title: ticketData.eventTitle || 'Événement',
+            eventDate: ticketData.eventDate || new Date().toISOString(),
+            location: ticketData.location || 'Non spécifié'
+          };
+
+          const userData = {
+            first_name: ticketData.attendeeName?.split(' ')[0] || 'Participant',
+            last_name: ticketData.attendeeName?.split(' ').slice(1).join(' ') || '',
+            email: ticketData.attendeeEmail,
+            phone: ticketData.attendeePhone || null
+          };
+
+          // Préparer les options PDF
+          const pdfOptions = {
+            templateId: options.templateId,
+            customFields: options.customFields,
+            ...options.pdfOptions
+          };
+
+          // Appeler le service PDF
+          const pdfResult = await pdfService.generateTicketPDF(ticketData, eventData, userData, { pdfOptions });
+          
+          if (pdfResult.success) {
+            generationResult.pdfData = {
+              filename: pdfResult.filename,
+              pdfBase64: pdfResult.pdfBase64,
+              generatedAt: pdfResult.generatedAt
+            };
+          } else {
+            logger.warn('PDF generation failed, returning QR only', {
+              ticketId: ticketData.id,
+              error: pdfResult.error
+            });
+          }
+        } catch (pdfError) {
+          logger.error('PDF generation error', {
+            ticketId: ticketData.id,
+            error: pdfError.message
+          });
+          // Continuer sans PDF plutôt que de tout échouer
+        }
+      }
+
       // Enregistrement du succès dans les logs
       logger.info('Ticket generated successfully', {
         ticketId: ticketData.id,
         eventId: ticketData.eventId,
-        userId: ticketData.userId
+        userId: ticketData.userId,
+        hasPDF: !!generationResult.pdfData
       });
 
       // Retour du ticket généré avec succès
       return res.status(201).json(
-        createdResponse('Ticket généré avec succès', {
-          ticketId: ticketData.id,
-          qrCodeData: qrResult.qrCode,
-          checksum: qrResult.signature,
-          generatedAt: qrResult.generatedAt
-        })
+        createdResponse('Ticket généré avec succès', generationResult)
       );
     } catch (error) {
       // En cas d'erreur, on l'enregistre dans les logs
@@ -225,18 +294,26 @@ class TicketsController {
    */
   async generatePDF(req, res, next) {
     try {
-      // Extraction des données du ticket, de l'événement, de l'utilisateur et des options
-      const { ticketData, eventData, userData, options = {} } = req.body;
+      // Extraction des données du ticket, de l'événement et des options
+      const { ticketData, eventData, options = {} } = req.body;
       
-      // Vérification que toutes les données obligatoires sont présentes
-      if (!ticketData || !eventData || !userData) {
+      // Vérification que les données obligatoires sont présentes
+      if (!ticketData || !eventData) {
         return res.status(400).json(
           errorResponse('Données incomplètes pour la génération PDF', null, 'INVALID_PDF_DATA')
         );
       }
 
+      // Construire les données utilisateur si non fournies
+      const userData = req.body.userData || {
+        first_name: ticketData.attendeeName?.split(' ')[0] || 'Participant',
+        last_name: ticketData.attendeeName?.split(' ').slice(1).join(' ') || '',
+        email: ticketData.attendeeEmail,
+        phone: ticketData.attendeePhone || null
+      };
+
       // Appel au service de génération de PDF
-      const pdfResult = await pdfService.generateTicketPDF(ticketData, eventData, userData, options.pdfOptions);
+      const pdfResult = await pdfService.generateTicketPDF(ticketData, eventData, userData, options);
       
       // Vérification si la génération du PDF a échoué
       if (!pdfResult.success) {

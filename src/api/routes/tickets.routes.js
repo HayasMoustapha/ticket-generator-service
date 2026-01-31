@@ -44,12 +44,22 @@ const generateTicketSchema = Joi.object({
     id: Joi.string().required(),
     // eventId : Identifiant de l'événement (obligatoire)
     eventId: Joi.string().required(),
+    // userId : Identifiant de l'utilisateur (obligatoire pour la génération PDF)
+    userId: Joi.string().required(),
     // type : Type de ticket (standard, vip, premium, staff) - par défaut standard
     type: Joi.string().valid('standard', 'vip', 'premium', 'staff').default('standard'),
     // attendeeName : Nom du participant pour affichage (obligatoire)
     attendeeName: Joi.string().required(),
     // attendeeEmail : Email pour affichage (obligatoire)
-    attendeeEmail: Joi.string().email().required()
+    attendeeEmail: Joi.string().email().required(),
+    // attendeePhone : Téléphone du participant (optionnel pour PDF)
+    attendeePhone: Joi.string().optional(),
+    // eventTitle : Titre de l'événement (optionnel pour PDF)
+    eventTitle: Joi.string().optional(),
+    // eventDate : Date de l'événement (optionnel pour PDF)
+    eventDate: Joi.string().optional(),
+    // location : Lieu de l'événement (optionnel pour PDF)
+    location: Joi.string().optional()
   }).required(),
   // options : Options de génération (optionnel)
   options: Joi.object({
@@ -61,8 +71,19 @@ const generateTicketSchema = Joi.object({
     pdfFormat: Joi.boolean().default(true),
     // includeLogo : Inclure un logo ou non - par défaut false
     includeLogo: Joi.boolean().default(false),
+    // templateId : Identifiant du template PDF (optionnel)
+    templateId: Joi.string().optional(),
     // customFields : Champs personnalisés (optionnel)
-    customFields: Joi.object().optional()
+    customFields: Joi.object().optional(),
+    // pdfOptions : Options spécifiques au PDF (optionnel)
+    pdfOptions: Joi.object({
+      // format : Format du PDF (A4, A5, letter) - par défaut A4
+      format: Joi.string().valid('A4', 'A5', 'letter').default('A4'),
+      // margins : Marges personnalisées (optionnel)
+      margins: Joi.object().optional(),
+      // fontSize : Taille de la police (optionnel)
+      fontSize: Joi.number().min(8).max(24).optional()
+    }).optional()
   }).optional()
 });
 
