@@ -1,4 +1,5 @@
 const DatabaseBootstrap = require('./services/database-bootstrap.service');
+const redisQueueService = require('./services/redis-queue.service');
 
 /**
  * Point d'entrée pour le bootstrap de l'application
@@ -23,6 +24,10 @@ class ApplicationBootstrap {
       await DatabaseBootstrap.initialize();
       console.log('✅ Database initialized successfully');
 
+      // 2. Démarrer le traitement de la Redis Queue (en arrière-plan)
+      console.log('🔄 Starting Redis Queue processing...');
+      this.startQueueProcessing();
+
       console.log('🎯 Application bootstrap completed successfully');
       
     } catch (error) {
@@ -30,6 +35,20 @@ class ApplicationBootstrap {
       console.error('🔥 Server cannot start - critical services unavailable');
       process.exit(1); // Arrêt immédiat si bootstrap échoue
     }
+  }
+
+  /**
+   * Démarre le traitement de la queue en arrière-plan
+   */
+  startQueueProcessing() {
+    // Démarrer le traitement de la queue sans bloquer le démarrage du serveur
+    setImmediate(async () => {
+      try {
+        await redisQueueService.startProcessing();
+      } catch (error) {
+        console.error('❌ Redis Queue processing failed:', error);
+      }
+    });
   }
 }
 
