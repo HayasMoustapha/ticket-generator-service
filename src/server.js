@@ -179,6 +179,35 @@ class TicketGeneratorServer {
     // 🎫 ROUTES TICKETS - Génération de tickets
     this.app.use('/api/tickets', ticketsRoutes);
 
+    // 🎫 ROUTE INFO TICKETS - Informations sur le service tickets
+    this.app.get('/api/tickets/', (req, res) => {
+      res.json({
+        service: 'Ticket Generator API',
+        version: process.env.npm_package_version || '1.0.0',
+        status: 'running',
+        endpoints: {
+          generate: 'POST /api/tickets/generate',
+          qrGenerate: 'POST /api/tickets/qr/generate',
+          batch: 'POST /api/tickets/batch',
+          pdf: 'POST /api/tickets/pdf',
+          batchPdf: 'POST /api/tickets/batch-pdf',
+          fullBatch: 'POST /api/tickets/full-batch',
+          jobStatus: 'GET /api/tickets/job/:jobId/status',
+          cancelJob: 'DELETE /api/tickets/job/:jobId/cancel',
+          createJob: 'POST /api/tickets/jobs',
+          processJob: 'POST /api/tickets/jobs/:jobId/process',
+          listJobs: 'GET /api/tickets/jobs',
+          download: 'GET /api/tickets/:ticketId/download',
+          qrcode: 'GET /api/tickets/:ticketId/qrcode',
+          queueStats: 'GET /api/tickets/queue/stats',
+          queueClean: 'POST /api/tickets/queue/clean',
+          eventTickets: 'GET /api/tickets/events/:eventId/tickets',
+          eventStats: 'GET /api/tickets/events/:eventId/stats'
+        },
+        timestamp: new Date().toISOString()
+      });
+    });
+
     // 📋 ROUTES QUEUES - Gestion des files d'attente
     this.app.use('/api/queues', queuesRoutes);
 
