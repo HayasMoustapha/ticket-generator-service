@@ -8,6 +8,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const { database } = require('../config/database');
+const notificationClient = require('../../../shared/clients/notification-client');
 
 class TicketGenerationService {
   constructor() {
@@ -405,6 +406,131 @@ class TicketGenerationService {
       }
     } catch (error) {
       console.error('[TICKET_GENERATION] Erreur nettoyage fichiers:', error);
+    }
+  }
+
+  /**
+   * Envoie une notification de génération de ticket terminée
+   * @param {Object} jobData - Données du job de génération
+   * @param {Array} tickets - Tickets générés
+   * @returns {Promise<Object>} Résultat de l'envoi
+   */
+  async sendTicketGenerationNotification(jobData, tickets) {
+    try {
+      // Récupérer les informations de l'événement et de l'utilisateur
+      const eventData = jobData.eventData || {};
+      const userData = jobData.userData || {};
+
+      // Préparer les données pour la notification
+      const notificationData = {
+        eventName: eventData.title || 'Événement',
+        eventDate: eventData.event_date,
+        eventLocation: eventData.location,
+        ticketCount: tickets.length,
+        ticketIds: tickets.map(t => t.id),
+        downloadUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/download`,
+        jobId: jobData.id
+      };
+
+      // Envoyer la notification à l'utilisateur
+      if (userData.email) {
+        const result = await notificationClient.sendTicketEmail(userData.email, notificationData);
+
+        if (!result.success) {
+          console.error('[TICKET_GENERATION] Failed to send ticket notification:', result.error);
+        }
+
+        return result;
+      } else {
+        console.warn('[TICKET_GENERATION] No user email found for ticket notification');
+        return { success: false, error: 'No user email found' };
+      }
+    } catch (error) {
+      console.error('[TICKET_GENERATION] Error sending ticket generation notification:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Envoie une notification d'erreur de génération de ticket
+   * @param {Object} jobData - Données du job de génération
+   * @param {string} error - Erreur survenue
+   * @returns {Promise<Object>} Résultat de l'envoi
+   */
+  async sendTicketGenerationErrorNotification(jobData, error) {
+    try {
+      const userData = jobData.userData || {};
+      const eventData = jobData.eventData || {};
+
+      if (userData.email) {
+        const result = await notificationClient.sendEmail({
+          to: userData.email,
+          template: 'ticket-generation-error',
+          subject: 'Problème lors de la génération de vos tickets',
+          data: {
+            eventName: eventData.title || 'Événement',
+            jobId: jobData.id,
+            error: error,
+            supportEmail: 'support@eventplanner.com',
+            retryUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/retry/${jobData.id}`
+          },
+          priority: 'high'
+        });
+
+        if (!result.success) {
+          console.error('[TICKET_GENERATION] Failed to send error notification:', result.error);
+        }
+
+        return result;
+      } else {
+        console.warn('[TICKET_GENERATION] No user email found for error notification');
+        return { success: false, error: 'No user email found' };
+      }
+    } catch (error) {
+      console.error('[TICKET_GENERATION] Error sending ticket generation error notification:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Envoie une notification de génération batch terminée
+   * @param {Object} jobData - Données du job batch
+   * @param {Object} batchResult - Résultat du batch
+   * @returns {Promise<Object>} Résultat de l'envoi
+   */
+  async sendBatchGenerationNotification(jobData, batchResult) {
+    try {
+      const userData = jobData.userData || {};
+      const eventData = jobData.eventData || {};
+
+      if (userData.email) {
+        const result = await notificationClient.sendEmail({
+          to: userData.email,
+          template: 'batch-generation-complete',
+          subject: 'Génération de tickets en lot terminée',
+          data: {
+            eventName: eventData.title || 'Événement',
+            totalTickets: batchResult.totalTickets,
+            successfulTickets: batchResult.successfulTickets,
+            failedTickets: batchResult.failedTickets,
+            jobId: jobData.id,
+            downloadUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/batch/${jobData.id}/download`
+          },
+          priority: 'normal'
+        });
+
+        if (!result.success) {
+          console.error('[TICKET_GENERATION] Failed to send batch notification:', result.error);
+        }
+
+        return result;
+      } else {
+        console.warn('[TICKET_GENERATION] No user email found for batch notification');
+        return { success: false, error: 'No user email found' };
+      }
+    } catch (error) {
+      console.error('[TICKET_GENERATION] Error sending batch generation notification:', error);
+      return { success: false, error: error.message };
     }
   }
 }
