@@ -75,11 +75,15 @@ class TicketGenerationService {
       }
 
       // Étape 3: Enregistrer en base de données locale
-      await this.saveGenerationLog(ticket_id, ticketData, qrCodeData, pdfFile);
+      const logResult = await this.saveGenerationLog(ticket_id, ticketData, qrCodeData, pdfFile);
+      
+      // Générer un ticket_code unique pour la réponse
+      const uniqueTicketCode = `${ticket_code}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       return {
         ticket_id,
-        ticket_code,
+        ticket_code: uniqueTicketCode, // Retourner le ticket_code unique
+        original_ticket_code: ticket_code, // Garder l'original pour référence
         qr_code_data: qrCodeData,
         pdf_file: pdfFile,
         generated_at: new Date().toISOString(),
@@ -272,7 +276,10 @@ class TicketGenerationService {
    */
   async saveGenerationLog(ticketId, ticketData, qrCodeData, pdfFile) {
     try {
-      const { ticket_code, guest, ticket_type, template, event } = ticketData;
+      const { ticket_code: originalTicketCode, guest, ticket_type, template, event } = ticketData;
+      
+      // Générer un ticket_code unique pour éviter les doublons
+      const uniqueTicketCode = `${originalTicketCode}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
       // 1. Enregistrer dans ticket_generation_logs
       const logQuery = `
@@ -283,7 +290,8 @@ class TicketGenerationService {
       
       const logDetails = {
         ticket_id: ticketId,
-        ticket_code: ticket_code,
+        original_ticket_code: originalTicketCode,
+        unique_ticket_code: uniqueTicketCode,
         guest_info: guest,
         ticket_type: ticket_type,
         event_info: event,
@@ -296,7 +304,7 @@ class TicketGenerationService {
       const logResult = await database.query(logQuery, [
         ticketId, // job_id
         'completed', // status
-        `Ticket ${ticket_code} généré avec succès`,
+        `Ticket ${uniqueTicketCode} généré avec succès`,
         JSON.stringify(logDetails)
       ]);
       
@@ -315,7 +323,7 @@ class TicketGenerationService {
       
       const ticketResult = await database.query(ticketQuery, [
         ticketId, // job_id
-        ticket_code,
+        uniqueTicketCode, // ticket_code unique
         qrCodeData,
         template?.id || null,
         guest?.id || null,
@@ -323,7 +331,7 @@ class TicketGenerationService {
         pdfFile?.path || null
       ]);
       
-      console.log(`[TICKET_GENERATION] Ticket généré enregistré: ${ticket_code} (generated_ticket_id: ${ticketResult.rows[0].id})`);
+      console.log(`[TICKET_GENERATION] Ticket généré enregistré: ${uniqueTicketCode} (generated_ticket_id: ${ticketResult.rows[0].id})`);
       
       return {
         log_id: logResult.rows[0].id,
