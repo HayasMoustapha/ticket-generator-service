@@ -101,33 +101,33 @@ class PDFService {
    * @param {Object} eventData - Données de l'événement
    */
   async addHeader(doc, eventData) {
-    const { margins, headerHeight } = this.defaultOptions;
-    
-    // Rectangle de l'en-tête
-    doc.rect(margins.left, doc.page.height - margins.top - headerHeight, 
-               doc.page.width - margins.left - margins.right, headerHeight);
-    
+    // Arrière-plan décoratif
+    doc.rect(0, 0, doc.page.width, doc.page.height)
+       .fill('#f8f9fa');
+
+    // En-tête avec dégradé manuel
+    const gradient = doc.linearGradient(0, 0, doc.page.width, 120);
+    gradient.stop(0, '#667eea')
+            .stop(1, '#764ba2');
+    doc.rect(0, 0, doc.page.width, 120)
+       .fill(gradient);
+
     // Titre de l'événement
-    doc.fontSize(24)
+    doc.fontSize(32)
        .font('Helvetica-Bold')
-       .fillColor('#2c3e50')
-       .text(eventData.title, margins.left + 50, doc.page.height - margins.top - 50);
+       .fillColor('#ffffff')
+       .text('TICKET D\'EVENEMENT', 40, 40);
     
-    // Date et lieu
-    doc.fontSize(14)
-       .font('Helvetica')
-       .fillColor('#7f8c8d')
-       .text(this.formatDate(eventData.eventDate), margins.left + 50, doc.page.height - margins.top - 80);
-    
-    if (eventData.location) {
-      doc.text(`📍 ${eventData.location}`, margins.left + 50, doc.page.height - margins.top - 100);
-    }
+    doc.fontSize(20)
+       .font('Helvetica-Bold')
+       .fillColor('#ffffff')
+       .text(eventData.title, 40, 80);
     
     // Ligne de séparation
-    doc.moveTo(margins.left, doc.page.height - margins.top - headerHeight - 10)
-       .lineTo(doc.page.width - margins.right, doc.page.height - margins.top - headerHeight - 10)
-       .lineWidth(1)
-       .strokeColor('#bdc3c7')
+    doc.moveTo(40, 120)
+       .lineTo(doc.page.width - 40, 120)
+       .lineWidth(2)
+       .strokeColor('#e1e4e8')
        .stroke();
   }
 
@@ -139,98 +139,177 @@ class PDFService {
    * @param {Object} userData - Données de l'utilisateur
    */
   async addTicketContent(doc, ticketData, eventData, userData) {
-    const { margins, headerHeight, footerHeight } = this.defaultOptions;
-    let yPosition = doc.page.height - margins.top - headerHeight - 40;
+    // Conteneur principal avec bordure
+    const containerY = 140;
+    const containerHeight = 400;
     
-    // Section Ticket Info
-    doc.fontSize(16)
+    // Ombre portée
+    doc.rect(42, containerY + 2, doc.page.width - 84, containerHeight)
+       .fill('#00000010');
+    
+    // Conteneur blanc
+    doc.rect(40, containerY, doc.page.width - 80, containerHeight)
+       .fill('#ffffff')
+       .lineWidth(2)
+       .strokeColor('#e1e4e8')
+       .stroke();
+
+    // Section gauche - Informations
+    const leftX = 60;
+    let currentY = containerY + 40;
+
+    // Titre section ticket
+    doc.fontSize(18)
        .font('Helvetica-Bold')
        .fillColor('#2c3e50')
-       .text('INFORMATIONS DU TICKET', margins.left + 50, yPosition);
+       .text('INFORMATIONS DU TICKET', leftX, currentY);
     
-    yPosition += 30;
-    
-    // Détails du ticket
+    currentY += 35;
+
+    // Détails du ticket avec style
     const ticketInfo = [
-      { label: 'Numéro de ticket:', value: `#${ticketData.id}` },
-      { label: 'Type:', value: ticketData.type || 'Standard' },
-      { label: 'Prix:', value: this.formatPrice(ticketData.price) },
-      { label: 'Statut:', value: this.getTicketStatus(ticketData.status) }
+      { label: 'Numero ticket:', value: `#${ticketData.id}` },
+      { label: 'Type ticket:', value: ticketData.type || 'Standard' },
+      { label: 'Prix ticket:', value: this.formatPrice(ticketData.price) },
+      { label: 'Statut ticket:', value: this.getTicketStatus(ticketData.status) }
     ];
     
     ticketInfo.forEach(info => {
-      doc.fontSize(12)
-         .font('Helvetica')
-         .fillColor('#34495e')
-         .text(info.label, margins.left + 50, yPosition);
-      
+      // Label
       doc.fontSize(12)
          .font('Helvetica-Bold')
-         .fillColor('#2c3e50')
-         .text(info.value, margins.left + 200, yPosition);
+         .fillColor('#7f8c8d')
+         .text(info.label, leftX, currentY);
       
-      yPosition += 20;
+      // Valeur
+      doc.fontSize(13)
+         .font('Helvetica')
+         .fillColor('#2c3e50')
+         .text(info.value, leftX + 120, currentY);
+      
+      currentY += 25;
     });
     
-    yPosition += 20;
+    currentY += 30;
     
-    // Section Participant
-    doc.fontSize(16)
+    // Titre section participant
+    doc.fontSize(18)
        .font('Helvetica-Bold')
        .fillColor('#2c3e50')
-       .text('INFORMATIONS DU PARTICIPANT', margins.left + 50, yPosition);
+       .text('INFORMATIONS DU PARTICIPANT', leftX, currentY);
     
-    yPosition += 30;
-    
+    currentY += 35;
+
     const participantInfo = [
-      { label: 'Nom:', value: `${userData.first_name} ${userData.last_name}` },
+      { label: 'Nom complet:', value: `${userData.first_name} ${userData.last_name}` },
       { label: 'Email:', value: userData.email },
-      { label: 'Téléphone:', value: userData.phone || 'Non spécifié' }
+      { label: 'Telephone:', value: userData.phone || 'Non specifie' }
     ];
     
     participantInfo.forEach(info => {
-      doc.fontSize(12)
-         .font('Helvetica')
-         .fillColor('#34495e')
-         .text(info.label, margins.left + 50, yPosition);
-      
+      // Label
       doc.fontSize(12)
          .font('Helvetica-Bold')
-         .fillColor('#2c3e50')
-         .text(info.value, margins.left + 200, yPosition);
+         .fillColor('#7f8c8d')
+         .text(info.label, leftX, currentY);
       
-      yPosition += 20;
+      // Valeur
+      doc.fontSize(13)
+         .font('Helvetica')
+         .fillColor('#2c3e50')
+         .text(info.value, leftX + 120, currentY);
+      
+      currentY += 25;
     });
     
-    yPosition += 30;
-    
-    // Espace pour le QR code
-    const qrCodeSize = 150;
-    const qrCodeX = (doc.page.width - qrCodeSize) / 2;
-    const qrCodeY = yPosition;
-    
-    // Placeholder pour le QR code
-    doc.rect(qrCodeX, qrCodeY, qrCodeSize, qrCodeSize);
-    doc.fontSize(10)
-       .font('Helvetica')
-       .fillColor('#7f8c8d')
-       .text('QR Code', qrCodeX + 50, qrCodeY + qrCodeSize / 2);
-    
-    // Légende du QR code
-    doc.fontSize(10)
-       .font('Helvetica')
-       .fillColor('#7f8c8d')
-       .text('Scannez ce code pour valider votre entrée', qrCodeX - 20, qrCodeY + qrCodeSize + 20);
-    
-    yPosition = qrCodeY + qrCodeSize + 60;
+    // Section droite - QR Code
+    const qrX = doc.page.width - 220;
+    const qrY = containerY + 40;
+
+    // Générer et intégrer le QR code
+    try {
+      const qrResult = await qrCodeService.generateTicketQRCode({
+        id: ticketData.id,
+        eventId: eventData.id,
+        userId: userData.id,
+        type: ticketData.type,
+        price: ticketData.price,
+        createdAt: ticketData.createdAt
+      });
+      
+      if (qrResult.success && qrResult.qrCodeBuffer) {
+        // Fond pour le QR code
+        doc.rect(qrX - 10, qrY - 10, 170, 210)
+           .fill('#f8f9fa')
+           .lineWidth(1)
+           .strokeColor('#e1e4e8')
+           .stroke();
+        
+        // Ajouter le QR code au PDF
+        doc.image(qrResult.qrCodeBuffer, qrX, qrY, { 
+          width: 150, 
+          height: 150 
+        });
+        
+        // Texte sous le QR code
+        doc.fontSize(11)
+           .font('Helvetica-Bold')
+           .fillColor('#2c3e50')
+           .text('Scannez pour', qrX + 15, qrY + 160, { width: 120, align: 'center' });
+        
+        doc.fontSize(11)
+           .font('Helvetica-Bold')
+           .fillColor('#667eea')
+           .text('valider l\'entrée', qrX + 15, qrY + 175, { width: 120, align: 'center' });
+        
+      } else {
+        // Placeholder stylisé
+        doc.rect(qrX - 10, qrY - 10, 170, 210)
+           .fill('#f8f9fa')
+           .lineWidth(1)
+           .strokeColor('#e1e4e8')
+           .stroke();
+        
+        doc.fontSize(12)
+           .fillColor('#7f8c8d')
+           .text('QR Code', qrX + 50, qrY + 70, { width: 50, align: 'center' });
+        
+        doc.fontSize(10)
+           .fillColor('#7f8c8d')
+           .text('temporairement', qrX + 50, qrY + 85, { width: 50, align: 'center' });
+        
+        doc.fontSize(10)
+           .fillColor('#7f8c8d')
+           .text('indisponible', qrX + 50, qrY + 100, { width: 50, align: 'center' });
+      }
+    } catch (qrError) {
+      logger.warn('Failed to generate QR code for PDF', {
+        ticketId: ticketData.id,
+        error: qrError.message
+      });
+      
+      // Placeholder en cas d'erreur
+      doc.rect(qrX - 10, qrY - 10, 170, 210)
+         .fill('#f8f9fa')
+         .lineWidth(1)
+         .strokeColor('#e1e4e8')
+         .stroke();
+      
+      doc.fontSize(12)
+         .fillColor('#7f8c8d')
+         .text('QR Code', qrX + 50, qrY + 70, { width: 50, align: 'center' });
+      
+      doc.fontSize(10)
+         .fillColor('#7f8c8d')
+         .text('indisponible', qrX + 50, qrY + 85, { width: 50, align: 'center' });
+    }
     
     // Instructions importantes
+    const instructionsY = containerY + containerHeight - 80;
     doc.fontSize(12)
        .font('Helvetica-Bold')
        .fillColor('#e74c3c')
-       .text('INSTRUCTIONS IMPORTANTES:', margins.left + 50, yPosition);
-    
-    yPosition += 20;
+       .text('INSTRUCTIONS IMPORTANTES:', leftX, instructionsY);
     
     const instructions = [
       '• Présentez ce ticket à l\'entrée',
@@ -239,12 +318,13 @@ class PDFService {
       '• En cas de perte, contactez l\'organisateur'
     ];
     
+    let instructionY = instructionsY + 20;
     instructions.forEach(instruction => {
       doc.fontSize(10)
          .font('Helvetica')
          .fillColor('#34495e')
-         .text(instruction, margins.left + 50, yPosition);
-      yPosition += 15;
+         .text(instruction, leftX, instructionY);
+      instructionY += 15;
     });
   }
 
@@ -254,27 +334,32 @@ class PDFService {
    * @param {Object} ticketData - Données du ticket
    */
   async addFooter(doc, ticketData) {
-    const { margins, footerHeight } = this.defaultOptions;
-    const footerY = margins.bottom;
+    const footerY = 560;
     
     // Ligne de séparation
-    doc.moveTo(margins.left, footerY + footerHeight)
-       .lineTo(doc.page.width - margins.right, footerY + footerHeight)
+    doc.moveTo(40, footerY)
+       .lineTo(doc.page.width - 40, footerY)
        .lineWidth(1)
-       .strokeColor('#bdc3c7')
+       .strokeColor('#e1e4e8')
        .stroke();
     
     // Informations du pied de page
-    doc.fontSize(8)
+    doc.fontSize(10)
        .font('Helvetica')
        .fillColor('#7f8c8d')
-       .text(`Ticket ID: ${ticketData.id}`, margins.left, footerY + 20);
+       .text(`Ticket ID: ${ticketData.id} | Genere le: ${new Date().toLocaleString('fr-FR')}`, 40, footerY + 15);
     
-    doc.text(`Généré le: ${new Date().toLocaleString('fr-FR')}`, margins.left + 200, footerY + 20);
+    doc.fontSize(10)
+       .font('Helvetica-Bold')
+       .fillColor('#667eea')
+       .text('Ce ticket est personnel et non transférable', 40, footerY + 30);
     
     // Numéro de page
     const pageNumber = doc.bufferedPageRange().start + 1;
-    doc.text(`Page ${pageNumber}`, doc.page.width - margins.right - 50, footerY + 20);
+    doc.fontSize(9)
+       .font('Helvetica')
+       .fillColor('#7f8c8d')
+       .text(`Page ${pageNumber}`, doc.page.width - 80, footerY + 20);
   }
 
   /**
