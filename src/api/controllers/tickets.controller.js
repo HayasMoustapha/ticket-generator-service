@@ -677,6 +677,98 @@ class TicketsController {
       next(error);
     }
   }
+
+  // ========================================
+  // MÉTHODES MANQUANTES POUR LES TEMPLATES EMAIL
+  // ========================================
+
+  /**
+   * Télécharge un ticket spécifique
+   * @param {Object} req - Requête Express avec l'ID du ticket
+   * @param {Object} res - Réponse Express pour retourner le PDF
+   * @param {Function} next - Middleware suivant en cas d'erreur
+   */
+  async downloadTicket(req, res, next) {
+    try {
+      const { ticketId } = req.params;
+      
+      // Récupérer les détails du ticket
+      const ticketDetails = await ticketService.getTicketDetails(ticketId);
+      
+      if (!ticketDetails.success) {
+        return res.status(404).json(
+          errorResponse('Ticket non trouvé', null, 'TICKET_NOT_FOUND')
+        );
+      }
+
+      // Générer le PDF du ticket
+      const pdfResult = await ticketService.generateTicketPDF(ticketDetails.data);
+      
+      if (!pdfResult.success) {
+        return res.status(500).json(
+          errorResponse('Échec de génération du PDF', null, 'PDF_GENERATION_FAILED')
+        );
+      }
+
+      // Envoyer le fichier PDF
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="ticket-${ticketId}.pdf"`);
+      res.send(pdfResult.data.pdfBuffer);
+      
+      logger.info('Ticket downloaded successfully', { ticketId });
+    } catch (error) {
+      logger.error('Ticket download failed', {
+        ticketId: req.params.ticketId,
+        error: error.message,
+        stack: error.stack
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Obtient le code QR d'un ticket
+   * @param {Object} req - Requête Express avec l'ID du ticket
+   * @param {Object} res - Réponse Express pour retourner l'image du QR
+   * @param {Function} next - Middleware suivant en cas d'erreur
+   */
+  async getTicketQR(req, res, next) {
+    try {
+      const { ticketId } = req.params;
+      
+      // Récupérer les détails du ticket
+      const ticketDetails = await ticketService.getTicketDetails(ticketId);
+      
+      if (!ticketDetails.success) {
+        return res.status(404).json(
+          errorResponse('Ticket non trouvé', null, 'TICKET_NOT_FOUND')
+        );
+      }
+
+      // Générer le code QR du ticket
+      const qrResult = await ticketService.generateTicketQR(ticketDetails.data);
+      
+      if (!qrResult.success) {
+        return res.status(500).json(
+          errorResponse('Échec de génération du code QR', null, 'QR_GENERATION_FAILED')
+        );
+      }
+
+      // Envoyer l'image du code QR
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache 1 heure
+      res.send(qrResult.data.qrBuffer);
+      
+      logger.info('Ticket QR generated successfully', { ticketId });
+    } catch (error) {
+      logger.error('Ticket QR generation failed', {
+        ticketId: req.params.ticketId,
+        error: error.message,
+        stack: error.stack
+      });
+      next(error);
+    }
+  }
 }
 
 // ========================================

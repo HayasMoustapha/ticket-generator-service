@@ -308,6 +308,64 @@ router.post('/:ticketId/regenerate',
   ticketsController.regenerateTicket
 );
 
+// ========================================
+// ROUTES MANQUANTES POUR LES TEMPLATES EMAIL
+// ========================================
+
+/**
+ * @swagger
+ * /tickets/{ticketId}/download:
+ *   get:
+ *     summary: Télécharger un ticket
+ *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: ticketId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Fichier PDF du ticket
+ *       404:
+ *         description: Ticket non trouvé
+ */
+router.get('/:ticketId/download',
+  ValidationMiddleware.validate(Joi.object({
+    ticketId: Joi.string().required()
+  }), 'params'),
+  ticketsController.downloadTicket
+);
+
+/**
+ * @swagger
+ * /tickets/{ticketId}/qr:
+ *   get:
+ *     summary: Obtenir le code QR d'un ticket
+ *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: ticketId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Image du code QR
+ *       404:
+ *         description: Ticket non trouvé
+ */
+router.get('/:ticketId/qr',
+  ValidationMiddleware.validate(Joi.object({
+    ticketId: Joi.string().required()
+  }), 'params'),
+  ticketsController.getTicketQR
+);
+
 // NOTE : La suppression de tickets métier est gérée par event-planner-core
 // Ce service ne gère que la génération technique
 // router.delete('/:ticketId',
