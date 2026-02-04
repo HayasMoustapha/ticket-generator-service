@@ -11,6 +11,7 @@ const batchService = require('../../core/database/batch.service');
 const { successResponse, errorResponse, createdResponse } = require('../../utils/response');
 // Logger pour enregistrer les événements et erreurs
 const logger = require('../../utils/logger');
+const fs = require('fs').promises;
 
 /**
  * 🎫 CONTRÔLEUR POUR LA GÉNÉRATION DE TICKETS
@@ -702,6 +703,23 @@ class TicketsController {
         return res.status(404).json(
           errorResponse('Ticket non trouvé', null, 'TICKET_NOT_FOUND')
         );
+      }
+
+      // Si un PDF généré existe, le servir directement (garantit la cohérence)
+      if (ticketDetails.data.pdfFilePath) {
+        try {
+          const pdfBuffer = await fs.readFile(ticketDetails.data.pdfFilePath);
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename="ticket-${ticketId}.pdf"`);
+          res.send(pdfBuffer);
+          logger.info('Ticket downloaded from stored file', { ticketId });
+          return;
+        } catch (fileError) {
+          logger.warn('Stored PDF not found, fallback to regeneration', {
+            ticketId,
+            error: fileError.message
+          });
+        }
       }
 
       const ticketData = {

@@ -1,6 +1,7 @@
 const Queue = require('bull');
 const crypto = require('crypto');
 const logger = require('../../utils/logger');
+const { database } = require('../../config/database');
 
 /**
  * Service de traitement par lots pour les tickets
@@ -916,15 +917,34 @@ class BatchService {
    */
   async getTicketDetailsFromDatabase(ticketId) {
     try {
-      // Implémentation de la récupération depuis la base de données
-      // Pour l'instant, retourne des données mockées
+      const query = `
+        SELECT details, created_at
+        FROM ticket_generation_logs
+        WHERE details->>'ticket_id' = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+
+      const result = await database.query(query, [String(ticketId)]);
+      if (!result.rows.length) {
+        return null;
+      }
+
+      const details = result.rows[0].details || {};
+
       return {
         ticketId,
-        eventId: 'mock_event_id',
-        ticketType: 'standard',
-        status: 'generated',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        eventId: details.event_info?.id || null,
+        ticketType: details.ticket_type?.name || null,
+        status: details.pdf_generated ? 'generated' : 'processing',
+        attendeeName: details.guest_info?.name || null,
+        attendeeEmail: details.guest_info?.email || null,
+        attendeePhone: details.guest_info?.phone || null,
+        eventTitle: details.event_info?.title || null,
+        eventDate: details.event_info?.date || null,
+        location: details.event_info?.location || null,
+        pdfFilePath: details.pdf_path || null,
+        createdAt: result.rows[0].created_at
       };
     } catch (error) {
       logger.error('Error getting ticket details from database:', error);

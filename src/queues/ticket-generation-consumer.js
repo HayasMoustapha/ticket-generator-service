@@ -141,7 +141,9 @@ async function storeGeneratedFile(fileData, filename, ticketId) {
     
     // Stockage local si configuré
     let localPath = null;
-    if (STORAGE_CONFIG.local.enabled) {
+    const localEnabled = STORAGE_CONFIG.local.enabled || (!STORAGE_CONFIG.local.enabled && !STORAGE_CONFIG.cdn.enabled);
+
+    if (localEnabled) {
       const fullPath = path.join(STORAGE_CONFIG.local.basePath, storedFilename);
       
       // Création du répertoire si nécessaire
@@ -165,7 +167,7 @@ async function storeGeneratedFile(fileData, filename, ticketId) {
       filename: storedFilename,
       local_path: localPath,
       cdn_url: cdnUrl,
-      file_url: cdnUrl || `file://${localPath}`,
+      file_url: cdnUrl || (localPath ? `file://${localPath}` : null),
       size_bytes: fileData.length,
       content_type: 'application/pdf',
       generated_at: new Date().toISOString()
