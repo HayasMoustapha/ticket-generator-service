@@ -96,8 +96,8 @@ async function generateTicketPDF(ticketData, qrCodeData) {
     try {
       // Création du document PDF
       const doc = new PDFDocument({
-        size: 'A6',
-        margin: 20,
+        size: 'A5',
+        margin: 24,
         info: {
           Title: `Ticket - ${ticketData.render_payload.event_title || 'Event'}`,
           Author: 'Event Planner',
@@ -115,27 +115,27 @@ async function generateTicketPDF(ticketData, qrCodeData) {
       });
       
       // En-tête du ticket
-      doc.fontSize(24).text('EVENT TICKET', { align: 'center' });
+      doc.fontSize(20).text('EVENT TICKET', { align: 'center' });
       doc.moveDown();
       
       // Informations de l'événement
-      doc.fontSize(16).text(ticketData.render_payload.event_title || 'Event Title', { align: 'center' });
+      doc.fontSize(14).text(ticketData.render_payload.event_title || 'Event Title', { align: 'center', width: doc.page.width - 48 });
       doc.moveDown();
       
       // Date et lieu
-      doc.fontSize(12).text(`Date: ${ticketData.render_payload.date || 'TBD'}`, { align: 'center' });
+      doc.fontSize(10).text(`Date: ${ticketData.render_payload.date || 'TBD'}`, { align: 'center' });
       if (ticketData.render_payload.venue) {
-        doc.text(`Lieu: ${ticketData.render_payload.venue}`, { align: 'center' });
+        doc.text(`Lieu: ${ticketData.render_payload.venue}`, { align: 'center', width: doc.page.width - 48 });
       }
       doc.moveDown();
       
       // Informations du participant
-      doc.fontSize(14).text('Participant:', { underline: true });
-      doc.fontSize(12).text(ticketData.render_payload.guest_name || 'Guest Name');
+      doc.fontSize(12).text('Participant:', { underline: true });
+      doc.fontSize(10).text(ticketData.render_payload.guest_name || 'Guest Name', { width: doc.page.width - 48 });
       doc.moveDown();
       
       // Code du ticket
-      doc.fontSize(12).text(`Code: ${ticketData.ticket_code}`);
+      doc.fontSize(10).text(`Code: ${ticketData.ticket_code}`, { width: doc.page.width - 48 });
       doc.moveDown();
       
       // QR Code
@@ -145,11 +145,11 @@ async function generateTicketPDF(ticketData, qrCodeData) {
         const qrBuffer = Buffer.from(base64Data, 'base64');
         
         doc.text('QR Code:', { underline: true });
-        doc.image(qrBuffer, { fit: [150, 150], align: 'center' });
+        doc.image(qrBuffer, { fit: [140, 140], align: 'center' });
       }
       
       // Pied de page
-      doc.fontSize(8).text('Généré par Event Planner - Ce ticket est non transférable', { align: 'center' });
+      doc.fontSize(8).text('Généré par Event Planner - Ce ticket est non transférable', { align: 'center', width: doc.page.width - 48 });
       
       // Finalisation du PDF
       doc.end();

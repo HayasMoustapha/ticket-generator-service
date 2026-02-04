@@ -240,15 +240,15 @@ class TicketGenerationService {
            .fill(gradient);
 
         // Titre de l'événement
-        doc.fontSize(32)
+        doc.fontSize(24)
            .font('Helvetica-Bold')
            .fillColor('#ffffff')
            .text('TICKET D\'ÉVÉNEMENT', 40, 40);
         
-        doc.fontSize(20)
+        doc.fontSize(16)
            .font('Helvetica-Bold')
            .fillColor('#ffffff')
-           .text(`${event.title}`, 40, 80);
+           .text(`${event.title}`, 40, 80, { width: doc.page.width - 80 });
 
         // Conteneur principal avec bordure arrondie
         const containerY = 140;
@@ -265,47 +265,51 @@ class TicketGenerationService {
            .strokeColor('#e1e4e8')
            .stroke();
 
-        // Section gauche - Informations
+        // Section gauche - Informations (mise en page sécurisée)
         const leftX = 60;
-        let currentY = containerY + 40;
+        const rightColumnWidth = 190;
+        const leftWidth = (doc.page.width - 80) - rightColumnWidth;
+        let currentY = containerY + 32;
 
         // Titre section
-        doc.fontSize(18)
+        doc.fontSize(16)
            .font('Helvetica-Bold')
            .fillColor('#2c3e50')
-           .text('INFORMATIONS DU TICKET', leftX, currentY);
-        
-        currentY += 35;
+           .text('INFORMATIONS DU TICKET', leftX, currentY, { width: leftWidth });
 
-        // Informations du ticket avec style
+        currentY += 26;
+
         const ticketInfo = [
-          { label: 'Code ticket:', value: ticket_code },
-          { label: 'Nom complet:', value: guest.name },
-          { label: 'Email:', value: guest.email },
-          { label: 'Type ticket:', value: ticket_type.name },
-          { label: 'Lieu evenement:', value: event.location },
-          { label: 'Date evenement:', value: new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }
+          { label: 'Code ticket', value: ticket_code },
+          { label: 'Nom complet', value: guest.name },
+          { label: 'Email', value: guest.email },
+          { label: 'Type ticket', value: ticket_type.name },
+          { label: 'Lieu événement', value: event.location },
+          { label: 'Date événement', value: new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }
         ];
 
-        ticketInfo.forEach(info => {
-          // Label
-          doc.fontSize(12)
+        const writeField = (label, value) => {
+          doc.fontSize(10)
              .font('Helvetica-Bold')
-             .fillColor('#7f8c8d')
-             .text(info.label, leftX, currentY);
-          
-          // Valeur
-          doc.fontSize(13)
+             .fillColor('#6b7280')
+             .text(`${label}:`, leftX, currentY, { width: leftWidth });
+
+          currentY += doc.heightOfString(`${label}:`, { width: leftWidth }) + 2;
+
+          const safeValue = value ? String(value) : '-';
+          doc.fontSize(11)
              .font('Helvetica')
-             .fillColor('#2c3e50')
-             .text(info.value, leftX + 120, currentY);
-          
-          currentY += 25;
-        });
+             .fillColor('#1f2937')
+             .text(safeValue, leftX, currentY, { width: leftWidth });
+
+          currentY += doc.heightOfString(safeValue, { width: leftWidth }) + 8;
+        };
+
+        ticketInfo.forEach(info => writeField(info.label, info.value));
 
         // Section droite - QR Code
-        const qrX = doc.page.width - 220;
-        const qrY = containerY + 40;
+        const qrX = doc.page.width - 60 - rightColumnWidth;
+        const qrY = containerY + 32;
 
         try {
           const qrCodeData = await this.generateQRCode(ticket_code, 'base64', 'medium');
@@ -369,10 +373,10 @@ class TicketGenerationService {
            .stroke();
 
         // Informations pied de page
-        doc.fontSize(10)
+        doc.fontSize(9)
            .font('Helvetica')
            .fillColor('#7f8c8d')
-           .text(`Ticket genere le: ${new Date().toLocaleDateString('fr-FR')} a ${new Date().toLocaleTimeString('fr-FR')}`, 60, footerY + 15);
+           .text(`Ticket généré le: ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 60, footerY + 15);
         
         doc.fontSize(10)
            .font('Helvetica-Bold')

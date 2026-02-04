@@ -113,15 +113,15 @@ class PDFService {
        .fill(gradient);
 
     // Titre de l'événement
-    doc.fontSize(32)
+    doc.fontSize(24)
        .font('Helvetica-Bold')
        .fillColor('#ffffff')
        .text('TICKET D\'EVENEMENT', 40, 40);
     
-    doc.fontSize(20)
+    doc.fontSize(16)
        .font('Helvetica-Bold')
        .fillColor('#ffffff')
-       .text(eventData.title, 40, 80);
+       .text(eventData.title, 40, 80, { width: doc.page.width - 80 });
     
     // Ligne de séparation
     doc.moveTo(40, 120)
@@ -141,7 +141,7 @@ class PDFService {
   async addTicketContent(doc, ticketData, eventData, userData) {
     // Conteneur principal avec bordure
     const containerY = 140;
-    const containerHeight = 400;
+    const containerHeight = 430;
     
     // Ombre portée
     doc.rect(42, containerY + 2, doc.page.width - 84, containerHeight)
@@ -156,49 +156,54 @@ class PDFService {
 
     // Section gauche - Informations
     const leftX = 60;
-    let currentY = containerY + 40;
+    const rightColumnWidth = 190;
+    const leftWidth = (doc.page.width - 80) - rightColumnWidth;
+    let currentY = containerY + 32;
 
     // Titre section ticket
-    doc.fontSize(18)
+    doc.fontSize(16)
        .font('Helvetica-Bold')
        .fillColor('#2c3e50')
-       .text('INFORMATIONS DU TICKET', leftX, currentY);
+       .text('INFORMATIONS DU TICKET', leftX, currentY, { width: leftWidth });
     
-    currentY += 35;
+    currentY += 26;
 
     // Détails du ticket avec style
     const ticketInfo = [
-      { label: 'Numero ticket:', value: `#${ticketData.id}` },
-      { label: 'Type ticket:', value: ticketData.type || 'Standard' },
-      { label: 'Prix ticket:', value: this.formatPrice(ticketData.price) },
-      { label: 'Statut ticket:', value: this.getTicketStatus(ticketData.status) }
+      { label: 'Numero ticket', value: `#${ticketData.id}` },
+      { label: 'Type ticket', value: ticketData.type || 'Standard' },
+      { label: 'Prix ticket', value: this.formatPrice(ticketData.price) },
+      { label: 'Statut ticket', value: this.getTicketStatus(ticketData.status) }
     ];
-    
-    ticketInfo.forEach(info => {
-      // Label
-      doc.fontSize(12)
+
+    const writeField = (label, value) => {
+      doc.fontSize(10)
          .font('Helvetica-Bold')
-         .fillColor('#7f8c8d')
-         .text(info.label, leftX, currentY);
-      
-      // Valeur
-      doc.fontSize(13)
+         .fillColor('#6b7280')
+         .text(`${label}:`, leftX, currentY, { width: leftWidth });
+
+      currentY += doc.heightOfString(`${label}:`, { width: leftWidth }) + 2;
+
+      const safeValue = value ? String(value) : '-';
+      doc.fontSize(11)
          .font('Helvetica')
-         .fillColor('#2c3e50')
-         .text(info.value, leftX + 120, currentY);
-      
-      currentY += 25;
-    });
+         .fillColor('#1f2937')
+         .text(safeValue, leftX, currentY, { width: leftWidth });
+
+      currentY += doc.heightOfString(safeValue, { width: leftWidth }) + 8;
+    };
+
+    ticketInfo.forEach(info => writeField(info.label, info.value));
     
     currentY += 30;
     
     // Titre section participant
-    doc.fontSize(18)
+    doc.fontSize(16)
        .font('Helvetica-Bold')
        .fillColor('#2c3e50')
-       .text('INFORMATIONS DU PARTICIPANT', leftX, currentY);
+       .text('INFORMATIONS DU PARTICIPANT', leftX, currentY, { width: leftWidth });
     
-    currentY += 35;
+    currentY += 26;
 
     const participantInfo = [
       { label: 'Nom complet:', value: `${userData.first_name} ${userData.last_name}` },
@@ -206,25 +211,11 @@ class PDFService {
       { label: 'Telephone:', value: userData.phone || 'Non specifie' }
     ];
     
-    participantInfo.forEach(info => {
-      // Label
-      doc.fontSize(12)
-         .font('Helvetica-Bold')
-         .fillColor('#7f8c8d')
-         .text(info.label, leftX, currentY);
-      
-      // Valeur
-      doc.fontSize(13)
-         .font('Helvetica')
-         .fillColor('#2c3e50')
-         .text(info.value, leftX + 120, currentY);
-      
-      currentY += 25;
-    });
+    participantInfo.forEach(info => writeField(info.label, info.value));
     
     // Section droite - QR Code
-    const qrX = doc.page.width - 220;
-    const qrY = containerY + 40;
+    const qrX = doc.page.width - 60 - rightColumnWidth;
+    const qrY = containerY + 32;
 
     // Générer et intégrer le QR code
     try {
@@ -305,11 +296,11 @@ class PDFService {
     }
     
     // Instructions importantes
-    const instructionsY = containerY + containerHeight - 80;
+    const instructionsY = Math.max(currentY + 6, containerY + containerHeight - 90);
     doc.fontSize(12)
        .font('Helvetica-Bold')
        .fillColor('#e74c3c')
-       .text('INSTRUCTIONS IMPORTANTES:', leftX, instructionsY);
+       .text('INSTRUCTIONS IMPORTANTES:', leftX, instructionsY, { width: leftWidth });
     
     const instructions = [
       '• Présentez ce ticket à l\'entrée',
