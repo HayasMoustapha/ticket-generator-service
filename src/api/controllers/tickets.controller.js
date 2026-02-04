@@ -693,7 +693,7 @@ class TicketsController {
       const { ticketId } = req.params;
       
       // Récupérer les détails du ticket
-      const ticketDetails = await ticketService.getTicketDetails(ticketId);
+      const ticketDetails = await batchService.getTicketDetails(ticketId);
       
       if (!ticketDetails.success) {
         return res.status(404).json(
@@ -701,8 +701,35 @@ class TicketsController {
         );
       }
 
+      const ticketData = {
+        id: ticketDetails.data.ticketId || ticketId,
+        eventId: ticketDetails.data.eventId || 'event_1',
+        userId: ticketDetails.data.userId || '1',
+        type: ticketDetails.data.ticketType || 'standard',
+        attendeeName: ticketDetails.data.attendeeName || 'Participant',
+        attendeeEmail: ticketDetails.data.attendeeEmail || 'participant@example.com',
+        attendeePhone: ticketDetails.data.attendeePhone || null,
+        eventTitle: ticketDetails.data.eventTitle || 'Événement',
+        eventDate: ticketDetails.data.eventDate || new Date().toISOString(),
+        location: ticketDetails.data.location || 'Non spécifié'
+      };
+
+      const eventData = {
+        id: ticketData.eventId,
+        title: ticketData.eventTitle,
+        eventDate: ticketData.eventDate,
+        location: ticketData.location
+      };
+
+      const userData = {
+        first_name: ticketData.attendeeName.split(' ')[0] || 'Participant',
+        last_name: ticketData.attendeeName.split(' ').slice(1).join(' ') || '',
+        email: ticketData.attendeeEmail,
+        phone: ticketData.attendeePhone
+      };
+
       // Générer le PDF du ticket
-      const pdfResult = await ticketService.generateTicketPDF(ticketDetails.data);
+      const pdfResult = await pdfService.generateTicketPDF(ticketData, eventData, userData);
       
       if (!pdfResult.success) {
         return res.status(500).json(
@@ -713,7 +740,7 @@ class TicketsController {
       // Envoyer le fichier PDF
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="ticket-${ticketId}.pdf"`);
-      res.send(pdfResult.data.pdfBuffer);
+      res.send(pdfResult.pdfBuffer);
       
       logger.info('Ticket downloaded successfully', { ticketId });
     } catch (error) {
@@ -737,7 +764,7 @@ class TicketsController {
       const { ticketId } = req.params;
       
       // Récupérer les détails du ticket
-      const ticketDetails = await ticketService.getTicketDetails(ticketId);
+      const ticketDetails = await batchService.getTicketDetails(ticketId);
       
       if (!ticketDetails.success) {
         return res.status(404).json(
@@ -745,8 +772,18 @@ class TicketsController {
         );
       }
 
+      const ticketData = {
+        id: ticketDetails.data.ticketId || ticketId,
+        eventId: ticketDetails.data.eventId || 'event_1',
+        userId: ticketDetails.data.userId || '1',
+        type: ticketDetails.data.ticketType || 'standard'
+      };
+
       // Générer le code QR du ticket
-      const qrResult = await ticketService.generateTicketQR(ticketDetails.data);
+      const qrResult = await qrCodeService.generateTicketQRCode(ticketData, {
+        size: 'medium',
+        format: 'png'
+      });
       
       if (!qrResult.success) {
         return res.status(500).json(
@@ -757,7 +794,7 @@ class TicketsController {
       // Envoyer l'image du code QR
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache 1 heure
-      res.send(qrResult.data.qrBuffer);
+      res.send(qrResult.qrCodeBuffer);
       
       logger.info('Ticket QR generated successfully', { ticketId });
     } catch (error) {
