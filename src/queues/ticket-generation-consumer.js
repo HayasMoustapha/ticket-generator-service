@@ -18,6 +18,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const ticketQueueService = require('../core/queue/ticket-queue.service');
 const ticketWebhookService = require('../core/webhooks/ticket-webhook.service');
+const ticketGenerationService = require('../services/ticket-generation.service');
 
 // Configuration
 const TICKET_GENERATION_QUEUE = 'ticket_generation_queue';
@@ -202,6 +203,18 @@ async function processTicket(ticket, eventId) {
     const storageInfo = await storeGeneratedFile(pdfBuffer, `ticket-${ticket.ticket_id}.pdf`, ticket.ticket_id);
     
     console.log(`[TICKET_PROCESSOR] Ticket ${ticket.ticket_id} traité avec succès`);
+
+    // Persister en base locale (logs + generated_tickets)
+    try {
+      await ticketGenerationService.saveGenerationLog(ticket.ticket_id, ticketData, qrCodeData, {
+        path: storageInfo.local_path,
+        url: storageInfo.file_url,
+        size_bytes: storageInfo.size_bytes
+      });
+    } catch (logError) {
+      console.warn(`[TICKET_PROCESSOR] Échec enregistrement DB ticket ${ticket.ticket_id}:`, logError.message);
+      // Ne pas bloquer le flow principal
+    }
     
     return {
       ticket_id: ticket.ticket_id,
@@ -216,6 +229,12 @@ async function processTicket(ticket, eventId) {
     
   } catch (error) {
     console.error(`[TICKET_PROCESSOR] Erreur traitement ticket ${ticket.ticket_id}:`, error.message);
+
+    try {
+      await ticketGenerationService.saveErrorLog(ticket.ticket_id, ticket, error);
+    } catch (logError) {
+      console.warn(`[TICKET_PROCESSOR] Échec log erreur DB ticket ${ticket.ticket_id}:`, logError.message);
+    }
     
     return {
       ticket_id: ticket.ticket_id,
