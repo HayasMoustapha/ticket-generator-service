@@ -50,86 +50,115 @@ class PDFService {
    * @param {number} startY - Position Y de départ
    */
   async drawEventTicketWithStub(doc, ticketData, eventData, userData, startX, startY) {
-    // Fond blanc simple
-    doc.rect(startX, startY, this.totalWidth, this.ticketHeight)
-       .fill('#ffffff');
+    const cardRadius = 10;
+    const cardX = startX;
+    const cardY = startY;
+    const cardW = this.totalWidth;
+    const cardH = this.ticketHeight;
 
-    // Bordure simple
-    doc.rect(startX, startY, this.totalWidth, this.ticketHeight)
-       .lineWidth(2)
-       .strokeColor('#333333')
-       .stroke();
+    // Ombre douce
+    doc.save();
+    doc.fillColor('#000000', 0.08)
+       .roundedRect(cardX + 2, cardY + 3, cardW, cardH, cardRadius)
+       .fill();
+    doc.restore();
+
+    // Carte principale
+    doc.roundedRect(cardX, cardY, cardW, cardH, cardRadius)
+       .lineWidth(1)
+       .strokeColor('#DDE4EA')
+       .fillAndStroke('#FFFFFF', '#DDE4EA');
 
     // === TICKET PRINCIPAL (gauche) ===
     const ticketX = startX;
     const ticketY = startY;
     
-    // Ligne de séparation verticale
-    doc.moveTo(ticketX + this.ticketWidth, ticketY)
-       .lineTo(ticketX + this.ticketWidth, ticketY + this.ticketHeight)
+    // Ligne de séparation verticale (entre ticket et souche)
+    doc.save();
+    doc.moveTo(ticketX + this.ticketWidth, ticketY + 10)
+       .lineTo(ticketX + this.ticketWidth, ticketY + this.ticketHeight - 10)
        .lineWidth(1)
-       .strokeColor('#cccccc')
+       .strokeColor('#E2E8F0')
        .stroke();
+    doc.restore();
 
-    // Numéro du ticket
-    doc.fontSize(12)
-       .font('Helvetica-Bold')
-       .fillColor('#333333')
-       .text(`Ticket #${ticketData.id}`, ticketX + 20, ticketY + 20);
-
-    // Titre de l'événement
-    doc.fontSize(14)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text(eventData.title, ticketX + 20, ticketY + 45, { 
-         width: this.ticketWidth - 40
-       });
-
-    // Date
-    const eventDate = this.formatDate(eventData.event_date);
-    doc.fontSize(10)
-       .font('Helvetica')
-       .fillColor('#666666')
-       .text(eventDate || 'Date à confirmer', ticketX + 20, ticketY + 80);
-
-    // Lieu
-    if (eventData.location) {
-      doc.fontSize(10)
-         .font('Helvetica')
-         .fillColor('#666666')
-         .text(eventData.location, ticketX + 20, ticketY + 100);
-    }
-
-    // Nom du participant
+    // Bandeau titre
+    doc.save();
+    doc.roundedRect(ticketX + 12, ticketY + 12, this.ticketWidth - 24, 34, 8)
+       .fill('#0F4C5C');
     doc.fontSize(11)
-       .font('Helvetica')
-       .fillColor('#333333')
-       .text(`${userData.first_name} ${userData.last_name}`, ticketX + 20, ticketY + 130);
+       .font('Helvetica-Bold')
+       .fillColor('#FFFFFF')
+       .text((eventData.title || 'Événement').toUpperCase(), ticketX + 18, ticketY + 22, {
+         width: this.ticketWidth - 36,
+         ellipsis: true
+       });
+    doc.restore();
 
-    // Type de ticket
+    // Numéro + type
+    doc.fontSize(9)
+       .font('Helvetica-Bold')
+       .fillColor('#C99B2B')
+       .text(`TICKET #${ticketData.id}`, ticketX + 18, ticketY + 54);
+
     doc.fontSize(9)
        .font('Helvetica')
-       .fillColor('#999999')
-       .text(ticketData.type || 'Standard', ticketX + 20, ticketY + 150);
+       .fillColor('#64748B')
+       .text(ticketData.type || 'Standard', ticketX + 18, ticketY + 68);
 
-    // Prix
+    // Détails événement
+    const eventDate = this.formatDate(eventData.event_date);
+    const detailX = ticketX + 18;
+    let detailY = ticketY + 90;
+    const labelStyle = () => doc.fontSize(8).font('Helvetica-Bold').fillColor('#8A9AA6');
+    const valueStyle = () => doc.fontSize(10).font('Helvetica').fillColor('#12323F');
+
+    labelStyle().text('DATE', detailX, detailY);
+    valueStyle().text(eventDate || 'Date à confirmer', detailX, detailY + 12, { width: this.ticketWidth - 36 });
+    detailY += 32;
+
+    labelStyle().text('LIEU', detailX, detailY);
+    valueStyle().text(eventData.location || 'Non spécifié', detailX, detailY + 12, { width: this.ticketWidth - 36 });
+    detailY += 32;
+
+    labelStyle().text('PARTICIPANT', detailX, detailY);
+    valueStyle().text(`${userData.first_name} ${userData.last_name}`, detailX, detailY + 12, {
+      width: this.ticketWidth - 36
+    });
+
+    // Prix en bas à droite
+    const priceText = this.formatPrice(ticketData.price);
     doc.fontSize(12)
        .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text(this.formatPrice(ticketData.price), ticketX + 20, ticketY + 170);
+       .fillColor('#12323F')
+       .text(priceText, ticketX + this.ticketWidth - 120, ticketY + this.ticketHeight - 28, {
+         width: 100,
+         align: 'right'
+       });
 
     // === SOUCHE DÉTACHABLE (droite) ===
     const stubX = ticketX + this.ticketWidth;
     const stubY = ticketY;
     
-    // Ligne de perforation
-    doc.moveTo(stubX, stubY + 30)
-       .lineTo(stubX, stubY + this.ticketHeight - 30)
+    // Fond de la souche
+    doc.save();
+    doc.roundedRect(stubX + 6, stubY + 6, this.stubWidth - 12, this.ticketHeight - 12, 8)
+       .fill('#F3F7F9')
        .lineWidth(1)
-       .strokeColor('#999999')
-       .dash(3, 3)
+       .strokeColor('#DDE4EA')
+       .stroke();
+    doc.restore();
+
+    // Ligne de perforation
+    doc.save();
+    doc.moveTo(stubX, stubY + 24)
+       .lineTo(stubX, stubY + this.ticketHeight - 24)
+       .lineWidth(1)
+       .strokeColor('#C8D4DC')
+       .dash(2, 4)
        .stroke();
     doc.undash();
+    doc.restore();
 
     // QR Code dans la souche
     try {
@@ -144,34 +173,47 @@ class PDFService {
       
       if (qrResult.success && qrResult.qrCodeBuffer) {
         // QR code centré
-        const qrSize = 80;
+        const qrSize = 76;
         const qrXPos = stubX + (this.stubWidth - qrSize) / 2;
-        
-        doc.image(qrResult.qrCodeBuffer, qrXPos, stubY + 40, { 
-          width: qrSize, 
-          height: qrSize 
-        });
-        
+        const qrYPos = stubY + 42;
+
+        // Cadre QR
+        doc.roundedRect(qrXPos - 6, qrYPos - 6, qrSize + 12, qrSize + 12, 6)
+           .fill('#FFFFFF')
+           .lineWidth(1)
+           .strokeColor('#DDE4EA')
+           .stroke();
+
+        doc.image(qrResult.qrCodeBuffer, qrXPos, qrYPos, { width: qrSize, height: qrSize });
+
         // Numéro sous QR code
         doc.fontSize(8)
+           .font('Helvetica-Bold')
+           .fillColor('#0F4C5C')
+           .text(`#${ticketData.id}`, stubX + 10, stubY + 132, {
+             width: this.stubWidth - 20,
+             align: 'center'
+           });
+
+        doc.fontSize(7)
            .font('Helvetica')
-           .fillColor('#666666')
-           .text(`#${ticketData.id}`, stubX + 10, stubY + 130, { 
-             width: this.stubWidth - 20, 
-             align: 'center' 
+           .fillColor('#6E7E88')
+           .text('Scan pour valider', stubX + 10, stubY + 146, {
+             width: this.stubWidth - 20,
+             align: 'center'
            });
         
       } else {
         // Placeholder simple
         doc.fontSize(8)
-           .fillColor('#999999')
-           .text('QR Code', stubX + 10, stubY + 80, { width: this.stubWidth - 20, align: 'center' });
+           .fillColor('#8A9AA6')
+           .text('QR Code', stubX + 10, stubY + 86, { width: this.stubWidth - 20, align: 'center' });
       }
     } catch (qrError) {
       // Placeholder erreur
       doc.fontSize(8)
-         .fillColor('#999999')
-         .text('Erreur QR', stubX + 10, stubY + 80, { width: this.stubWidth - 20, align: 'center' });
+         .fillColor('#8A9AA6')
+         .text('QR indisponible', stubX + 10, stubY + 86, { width: this.stubWidth - 20, align: 'center' });
     }
   }
 

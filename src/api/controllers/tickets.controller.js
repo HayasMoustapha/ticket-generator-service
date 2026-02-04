@@ -125,8 +125,11 @@ class TicketsController {
       const qrDataForService = {
         id: ticketData.id,
         eventId: ticketData.eventId,
+        userId: ticketData.userId,
         code: `${ticketData.id}-${ticketData.eventId}`, // Générer un code unique
-        type: 'TICKET'
+        type: (ticketData.type || 'standard').toLowerCase(),
+        price: ticketData.price,
+        createdAt: ticketData.createdAt || new Date().toISOString()
       };
 
       // Préparer les options QR
