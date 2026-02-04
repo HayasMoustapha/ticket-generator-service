@@ -12,7 +12,7 @@
  */
 
 const QRCode = require('qrcode');
-const PDFDocument = require('pdfkit');
+const pdfService = require('../core/pdf/pdf.service');
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs').promises;
@@ -91,73 +91,39 @@ function generateChecksum(data) {
  * @param {string} qrCodeData - Données du QR code
  * @returns {Promise<Buffer>} Buffer du PDF généré
  */
-async function generateTicketPDF(ticketData, qrCodeData) {
-  return new Promise((resolve, reject) => {
-    try {
-      // Création du document PDF
-      const doc = new PDFDocument({
-        size: 'A5',
-        margin: 24,
-        info: {
-          Title: `Ticket - ${ticketData.render_payload.event_title || 'Event'}`,
-          Author: 'Event Planner',
-          Subject: `Ticket ${ticketData.ticket_code}`,
-          Creator: 'Event Planner Ticket Generator'
-        }
-      });
-      
-      const buffers = [];
-      
-      doc.on('data', buffers.push.bind(buffers));
-      doc.on('end', () => {
-        const pdfData = Buffer.concat(buffers);
-        resolve(pdfData);
-      });
-      
-      // En-tête du ticket
-      doc.fontSize(20).text('EVENT TICKET', { align: 'center' });
-      doc.moveDown();
-      
-      // Informations de l'événement
-      doc.fontSize(14).text(ticketData.render_payload.event_title || 'Event Title', { align: 'center', width: doc.page.width - 48 });
-      doc.moveDown();
-      
-      // Date et lieu
-      doc.fontSize(10).text(`Date: ${ticketData.render_payload.date || 'TBD'}`, { align: 'center' });
-      if (ticketData.render_payload.venue) {
-        doc.text(`Lieu: ${ticketData.render_payload.venue}`, { align: 'center', width: doc.page.width - 48 });
-      }
-      doc.moveDown();
-      
-      // Informations du participant
-      doc.fontSize(12).text('Participant:', { underline: true });
-      doc.fontSize(10).text(ticketData.render_payload.guest_name || 'Guest Name', { width: doc.page.width - 48 });
-      doc.moveDown();
-      
-      // Code du ticket
-      doc.fontSize(10).text(`Code: ${ticketData.ticket_code}`, { width: doc.page.width - 48 });
-      doc.moveDown();
-      
-      // QR Code
-      if (qrCodeData) {
-        // Conversion du data URL en buffer
-        const base64Data = qrCodeData.replace(/^data:image\/png;base64,/, '');
-        const qrBuffer = Buffer.from(base64Data, 'base64');
-        
-        doc.text('QR Code:', { underline: true });
-        doc.image(qrBuffer, { fit: [140, 140], align: 'center' });
-      }
-      
-      // Pied de page
-      doc.fontSize(8).text('Généré par Event Planner - Ce ticket est non transférable', { align: 'center', width: doc.page.width - 48 });
-      
-      // Finalisation du PDF
-      doc.end();
-      
-    } catch (error) {
-      reject(new Error(`Erreur génération PDF: ${error.message}`));
-    }
-  });
+async function generateTicketPDF(ticketData) {
+  const guestName = ticketData?.guest?.name || 'Participant';
+  const [firstName, ...lastParts] = guestName.split(' ');
+
+  const mappedTicket = {
+    id: ticketData.ticket_id,
+    type: ticketData.ticket_type?.name || ticketData.type || 'Standard',
+    price: ticketData.price || null,
+    createdAt: ticketData.created_at || new Date().toISOString()
+  };
+
+  const mappedEvent = {
+    id: ticketData.event?.id || ticketData.event_id,
+    title: ticketData.event?.title || ticketData.render_payload?.event_title || 'Événement',
+    location: ticketData.event?.location || ticketData.render_payload?.venue || 'Non spécifié',
+    event_date: ticketData.event?.date || ticketData.event?.event_date || new Date().toISOString()
+  };
+
+  const mappedUser = {
+    id: ticketData.guest?.id || ticketData.guest_id || null,
+    first_name: firstName || 'Participant',
+    last_name: lastParts.join(' ') || '',
+    email: ticketData.guest?.email || ticketData.render_payload?.guest_email || null,
+    phone: ticketData.guest?.phone || ticketData.render_payload?.guest_phone || null
+  };
+
+  const pdfResult = await pdfService.generateTicketPDF(mappedTicket, mappedEvent, mappedUser);
+
+  if (!pdfResult.success) {
+    throw new Error(pdfResult.error || 'PDF generation failed');
+  }
+
+  return pdfResult.pdfBuffer;
 }
 
 /**
@@ -230,7 +196,7 @@ async function processTicket(ticket, eventId) {
     const qrCodeData = await generateSecureQRCode(ticketData);
     
     // Génération du PDF
-    const pdfBuffer = await generateTicketPDF(ticketData, qrCodeData);
+    const pdfBuffer = await generateTicketPDF(ticketData);
     
     // Stockage du fichier
     const storageInfo = await storeGeneratedFile(pdfBuffer, `ticket-${ticket.ticket_id}.pdf`, ticket.ticket_id);
