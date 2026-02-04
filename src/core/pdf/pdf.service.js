@@ -36,6 +36,21 @@ class PDFService {
     this.totalWidth = this.ticketWidth + this.stubWidth + 10; // +10 pour la perforation
     this.ticketHeight = 200;
 
+    // Palette unifiée pour tous les PDFs générés par le service
+    this.theme = {
+      page: '#F6F7F9',
+      surface: '#FFFFFF',
+      primary: '#1F2937',
+      accent: '#0EA5A4',
+      text: '#1F2937',
+      muted: '#6B7280',
+      label: '#94A3B8',
+      border: '#E5E7EB',
+      borderLight: '#EEF2F7',
+      stub: '#F1F5F9',
+      danger: '#DC2626'
+    };
+
     this.templatesPath = path.join(__dirname, 'templates');
     this.ensureTemplatesDirectory();
   }
@@ -66,8 +81,8 @@ class PDFService {
     // Carte principale
     doc.roundedRect(cardX, cardY, cardW, cardH, cardRadius)
        .lineWidth(1)
-       .strokeColor('#DDE4EA')
-       .fillAndStroke('#FFFFFF', '#DDE4EA');
+       .strokeColor(this.theme.border)
+       .fillAndStroke(this.theme.surface, this.theme.border);
 
     // === TICKET PRINCIPAL (gauche) ===
     const ticketX = startX;
@@ -78,17 +93,17 @@ class PDFService {
     doc.moveTo(ticketX + this.ticketWidth, ticketY + 10)
        .lineTo(ticketX + this.ticketWidth, ticketY + this.ticketHeight - 10)
        .lineWidth(1)
-       .strokeColor('#E2E8F0')
+       .strokeColor(this.theme.borderLight)
        .stroke();
     doc.restore();
 
     // Bandeau titre
     doc.save();
     doc.roundedRect(ticketX + 12, ticketY + 12, this.ticketWidth - 24, 34, 8)
-       .fill('#0F4C5C');
+       .fill(this.theme.primary);
     doc.fontSize(11)
        .font('Helvetica-Bold')
-       .fillColor('#FFFFFF')
+       .fillColor(this.theme.surface)
        .text((eventData.title || 'Événement').toUpperCase(), ticketX + 18, ticketY + 22, {
          width: this.ticketWidth - 36,
          ellipsis: true
@@ -98,20 +113,20 @@ class PDFService {
     // Numéro + type
     doc.fontSize(9)
        .font('Helvetica-Bold')
-       .fillColor('#C99B2B')
+       .fillColor(this.theme.accent)
        .text(`TICKET #${ticketData.id}`, ticketX + 18, ticketY + 54);
 
     doc.fontSize(9)
        .font('Helvetica')
-       .fillColor('#64748B')
+       .fillColor(this.theme.muted)
        .text(ticketData.type || 'Standard', ticketX + 18, ticketY + 68);
 
     // Détails événement
     const eventDate = this.formatDate(eventData.event_date);
     const detailX = ticketX + 18;
     let detailY = ticketY + 90;
-    const labelStyle = () => doc.fontSize(8).font('Helvetica-Bold').fillColor('#8A9AA6');
-    const valueStyle = () => doc.fontSize(10).font('Helvetica').fillColor('#12323F');
+    const labelStyle = () => doc.fontSize(8).font('Helvetica-Bold').fillColor(this.theme.label);
+    const valueStyle = () => doc.fontSize(10).font('Helvetica').fillColor(this.theme.text);
 
     labelStyle().text('DATE', detailX, detailY);
     valueStyle().text(eventDate || 'Date à confirmer', detailX, detailY + 12, { width: this.ticketWidth - 36 });
@@ -130,7 +145,7 @@ class PDFService {
     const priceText = this.formatPrice(ticketData.price);
     doc.fontSize(12)
        .font('Helvetica-Bold')
-       .fillColor('#12323F')
+       .fillColor(this.theme.text)
        .text(priceText, ticketX + this.ticketWidth - 120, ticketY + this.ticketHeight - 28, {
          width: 100,
          align: 'right'
@@ -143,9 +158,9 @@ class PDFService {
     // Fond de la souche
     doc.save();
     doc.roundedRect(stubX + 6, stubY + 6, this.stubWidth - 12, this.ticketHeight - 12, 8)
-       .fill('#F3F7F9')
+       .fill(this.theme.stub)
        .lineWidth(1)
-       .strokeColor('#DDE4EA')
+       .strokeColor(this.theme.border)
        .stroke();
     doc.restore();
 
@@ -154,7 +169,7 @@ class PDFService {
     doc.moveTo(stubX, stubY + 24)
        .lineTo(stubX, stubY + this.ticketHeight - 24)
        .lineWidth(1)
-       .strokeColor('#C8D4DC')
+       .strokeColor(this.theme.border)
        .dash(2, 4)
        .stroke();
     doc.undash();
@@ -179,9 +194,9 @@ class PDFService {
 
         // Cadre QR
         doc.roundedRect(qrXPos - 6, qrYPos - 6, qrSize + 12, qrSize + 12, 6)
-           .fill('#FFFFFF')
+           .fill(this.theme.surface)
            .lineWidth(1)
-           .strokeColor('#DDE4EA')
+           .strokeColor(this.theme.border)
            .stroke();
 
         doc.image(qrResult.qrCodeBuffer, qrXPos, qrYPos, { width: qrSize, height: qrSize });
@@ -189,7 +204,7 @@ class PDFService {
         // Numéro sous QR code
         doc.fontSize(8)
            .font('Helvetica-Bold')
-           .fillColor('#0F4C5C')
+           .fillColor(this.theme.primary)
            .text(`#${ticketData.id}`, stubX + 10, stubY + 132, {
              width: this.stubWidth - 20,
              align: 'center'
@@ -197,7 +212,7 @@ class PDFService {
 
         doc.fontSize(7)
            .font('Helvetica')
-           .fillColor('#6E7E88')
+           .fillColor(this.theme.muted)
            .text('Scan pour valider', stubX + 10, stubY + 146, {
              width: this.stubWidth - 20,
              align: 'center'
@@ -206,13 +221,13 @@ class PDFService {
       } else {
         // Placeholder simple
         doc.fontSize(8)
-           .fillColor('#8A9AA6')
+           .fillColor(this.theme.label)
            .text('QR Code', stubX + 10, stubY + 86, { width: this.stubWidth - 20, align: 'center' });
       }
     } catch (qrError) {
       // Placeholder erreur
       doc.fontSize(8)
-         .fillColor('#8A9AA6')
+         .fillColor(this.theme.label)
          .text('QR indisponible', stubX + 10, stubY + 86, { width: this.stubWidth - 20, align: 'center' });
     }
   }
@@ -231,7 +246,7 @@ class PDFService {
       
       // Fond de la page
       doc.rect(0, 0, doc.page.width, doc.page.height)
-         .fill('#f8f9fa');
+         .fill(this.theme.page);
 
       // Ajouter le ticket avec souche détachable au centre de la page
       const startX = (doc.page.width - this.totalWidth) / 2;
@@ -279,31 +294,31 @@ class PDFService {
   async addHeader(doc, eventData) {
     // Arrière-plan décoratif
     doc.rect(0, 0, doc.page.width, doc.page.height)
-       .fill('#f8f9fa');
+       .fill(this.theme.page);
 
     // En-tête avec dégradé simple
     const gradient = doc.linearGradient(0, 0, doc.page.width, this.defaultOptions.headerHeight);
-    gradient.stop(0, '#667eea')
-            .stop(1, '#764ba2');
+    gradient.stop(0, this.theme.primary)
+            .stop(1, this.theme.accent);
     doc.rect(0, 0, doc.page.width, this.defaultOptions.headerHeight)
        .fill(gradient);
 
     // Titre de l'événement
     doc.fontSize(20) // Réduit de 24 à 20
        .font('Helvetica-Bold')
-       .fillColor('#ffffff')
+       .fillColor(this.theme.surface)
        .text('TICKET D\'EVENEMENT', 40, 25);
     
     doc.fontSize(14) // Réduit de 16 à 14
        .font('Helvetica-Bold')
-       .fillColor('#ffffff')
+       .fillColor(this.theme.surface)
        .text(eventData.title, 40, 50, { width: doc.page.width - 80 });
     
     // Ligne de séparation
     doc.moveTo(40, this.defaultOptions.headerHeight)
        .lineTo(doc.page.width - 40, this.defaultOptions.headerHeight)
        .lineWidth(2)
-       .strokeColor('#e1e4e8')
+       .strokeColor(this.theme.border)
        .stroke();
   }
 
@@ -325,9 +340,9 @@ class PDFService {
     
     // Conteneur blanc
     doc.rect(40, containerY, doc.page.width - 80, containerHeight)
-       .fill('#ffffff')
+       .fill(this.theme.surface)
        .lineWidth(2)
-       .strokeColor('#e1e4e8')
+       .strokeColor(this.theme.border)
        .stroke();
 
     // Section gauche - Informations
@@ -339,7 +354,7 @@ class PDFService {
     // Titre section ticket
     doc.fontSize(12) // Réduit de 16 à 12
        .font('Helvetica-Bold')
-       .fillColor('#2c3e50')
+       .fillColor(this.theme.text)
        .text('INFORMATIONS DU TICKET', leftX, currentY, { width: leftWidth });
     
     currentY += 20;
@@ -355,7 +370,7 @@ class PDFService {
     const writeField = (label, value) => {
       doc.fontSize(8) // Réduit de 10 à 8
          .font('Helvetica-Bold')
-         .fillColor('#6b7280')
+         .fillColor(this.theme.muted)
          .text(`${label}:`, leftX, currentY, { width: leftWidth });
 
       currentY += doc.heightOfString(`${label}:`, { width: leftWidth }) + 1;
@@ -363,7 +378,7 @@ class PDFService {
       const safeValue = value ? String(value) : '-';
       doc.fontSize(9) // Réduit de 11 à 9
          .font('Helvetica')
-         .fillColor('#1f2937')
+         .fillColor(this.theme.text)
          .text(safeValue, leftX, currentY, { width: leftWidth });
 
       currentY += doc.heightOfString(safeValue, { width: leftWidth }) + 6;
@@ -376,7 +391,7 @@ class PDFService {
     // Titre section participant
     doc.fontSize(12) // Réduit de 16 à 12
        .font('Helvetica-Bold')
-       .fillColor('#2c3e50')
+       .fillColor(this.theme.text)
        .text('INFORMATIONS DU PARTICIPANT', leftX, currentY, { width: leftWidth });
     
     currentY += 20;
@@ -407,9 +422,9 @@ class PDFService {
       if (qrResult.success && qrResult.qrCodeBuffer) {
         // Fond pour le QR code
         doc.rect(qrX - 10, qrY - 10, 160, 190)
-           .fill('#f8f9fa')
+           .fill(this.theme.page)
            .lineWidth(1)
-           .strokeColor('#e1e4e8')
+           .strokeColor(this.theme.border)
            .stroke();
         
         // Ajouter le QR code au PDF
@@ -421,32 +436,32 @@ class PDFService {
         // Texte sous le QR code
         doc.fontSize(9) // Réduit de 11 à 9
            .font('Helvetica-Bold')
-           .fillColor('#2c3e50')
+           .fillColor(this.theme.text)
            .text('Scannez pour', qrX + 10, qrY + 150, { width: 120, align: 'center' });
         
         doc.fontSize(9) // Réduit de 11 à 9
            .font('Helvetica-Bold')
-           .fillColor('#667eea')
+           .fillColor(this.theme.accent)
            .text('valider l\'entree', qrX + 10, qrY + 163, { width: 120, align: 'center' });
         
       } else {
         // Placeholder stylisé
         doc.rect(qrX - 10, qrY - 10, 160, 190)
-           .fill('#f8f9fa')
+           .fill(this.theme.page)
            .lineWidth(1)
-           .strokeColor('#e1e4e8')
+           .strokeColor(this.theme.border)
            .stroke();
         
         doc.fontSize(10) // Réduit de 12 à 10
-           .fillColor('#7f8c8d')
+           .fillColor(this.theme.muted)
            .text('QR Code', qrX + 40, qrY + 70, { width: 50, align: 'center' });
         
         doc.fontSize(8) // Réduit de 10 à 8
-           .fillColor('#7f8c8d')
+           .fillColor(this.theme.muted)
            .text('temporairement', qrX + 40, qrY + 85, { width: 50, align: 'center' });
         
         doc.fontSize(8)
-           .fillColor('#7f8c8d')
+           .fillColor(this.theme.muted)
            .text('indisponible', qrX + 40, qrY + 98, { width: 50, align: 'center' });
       }
     } catch (qrError) {
@@ -457,17 +472,17 @@ class PDFService {
       
       // Placeholder en cas d'erreur
       doc.rect(qrX - 10, qrY - 10, 160, 190)
-         .fill('#f8f9fa')
+         .fill(this.theme.page)
          .lineWidth(1)
-         .strokeColor('#e1e4e8')
+         .strokeColor(this.theme.border)
          .stroke();
       
       doc.fontSize(10)
-         .fillColor('#7f8c8d')
+         .fillColor(this.theme.muted)
          .text('QR Code', qrX + 40, qrY + 70, { width: 50, align: 'center' });
       
       doc.fontSize(8)
-         .fillColor('#7f8c8d')
+         .fillColor(this.theme.muted)
          .text('indisponible', qrX + 40, qrY + 85, { width: 50, align: 'center' });
     }
     
@@ -475,7 +490,7 @@ class PDFService {
     const instructionsY = Math.max(currentY + 6, containerY + containerHeight - 70);
     doc.fontSize(10) // Réduit de 12 à 10
        .font('Helvetica-Bold')
-       .fillColor('#e74c3c')
+       .fillColor(this.theme.danger)
        .text('INSTRUCTIONS IMPORTANTES:', leftX, instructionsY, { width: leftWidth });
     
     const instructions = [
@@ -489,7 +504,7 @@ class PDFService {
     instructions.forEach(instruction => {
       doc.fontSize(8) // Réduit de 10 à 8
          .font('Helvetica')
-         .fillColor('#34495e')
+         .fillColor(this.theme.text)
          .text(instruction, leftX, instructionY);
       instructionY += 12;
     });
@@ -507,25 +522,25 @@ class PDFService {
     doc.moveTo(40, footerY)
        .lineTo(doc.page.width - 40, footerY)
        .lineWidth(1)
-       .strokeColor('#e1e4e8')
+       .strokeColor(this.theme.border)
        .stroke();
     
     // Informations du pied de page
     doc.fontSize(8) // Réduit de 10 à 8
        .font('Helvetica')
-       .fillColor('#7f8c8d')
+       .fillColor(this.theme.muted)
        .text(`Ticket ID: ${ticketData.id} | Genere le: ${new Date().toLocaleString('fr-FR')}`, 40, footerY + 10);
     
     doc.fontSize(8) // Réduit de 10 à 8
        .font('Helvetica-Bold')
-       .fillColor('#667eea')
+       .fillColor(this.theme.accent)
        .text('Ce ticket est personnel et non transférable', 40, footerY + 20);
     
     // Numéro de page
     const pageNumber = doc.bufferedPageRange().start + 1;
     doc.fontSize(7) // Réduit de 9 à 7
        .font('Helvetica')
-       .fillColor('#7f8c8d')
+       .fillColor(this.theme.muted)
        .text(`Page ${pageNumber}`, doc.page.width - 60, footerY + 15);
   }
 
@@ -549,14 +564,14 @@ class PDFService {
       // Page de garde
       doc.fontSize(20)
          .font('Helvetica-Bold')
-         .fillColor('#2c3e50')
+         .fillColor(this.theme.text)
          .text('LOT DE TICKETS', doc.page.width / 2 - 80, yPosition, { align: 'center' });
       
       yPosition += 40;
       
       doc.fontSize(14)
          .font('Helvetica')
-         .fillColor('#34495e')
+         .fillColor(this.theme.muted)
          .text(`Événement: ${eventData.title}`, doc.page.width / 2 - 100, yPosition, { align: 'center' });
       
       yPosition += 20;
