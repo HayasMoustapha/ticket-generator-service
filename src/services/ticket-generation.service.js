@@ -6,9 +6,9 @@
 const QRCode = require('qrcode');
 const fs = require('fs').promises;
 const path = require('path');
-const PDFDocument = require('pdfkit');
 const { database } = require('../config/database');
 const notificationClient = require('../../../shared/clients/notification-client');
+const pdfService = require('../core/pdf/pdf.service');
 
 class TicketGenerationService {
   constructor() {
@@ -175,16 +175,13 @@ class TicketGenerationService {
    */
   async generatePDF(ticketData, options = {}) {
     try {
-      const { ticket_id, ticket_code, guest, ticket_type, template, event } = ticketData;
-      
-      // Pour l'instant, simuler la génération PDF
-      // Dans une vraie implémentation, utiliser une librairie comme puppeteer ou pdfkit
+      const { ticket_id, ticket_code } = ticketData;
+
       const filename = `ticket_${ticket_code}_${Date.now()}.pdf`;
       const filepath = path.join(this.outputDir, filename);
-      
-      // Générer le vrai contenu PDF avec PDFKit
-      const pdfContent = await this.generatePDFContent(ticketData);
-      await fs.writeFile(filepath, pdfContent);
+
+      const pdfBuffer = await this.generatePDFContent(ticketData, options);
+      await fs.writeFile(filepath, pdfBuffer);
 
       const stats = await fs.stat(filepath);
 
@@ -205,191 +202,42 @@ class TicketGenerationService {
    * @returns {Buffer} Contenu PDF binaire
    */
   async generatePDFContent(ticketData) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const { ticket_code, guest, ticket_type, event } = ticketData;
-        
-        // Créer un nouveau document PDF
-        const doc = new PDFDocument({
-          size: 'A4',
-          margins: {
-            top: 40,
-            bottom: 40,
-            left: 40,
-            right: 40
-          }
-        });
+    const { ticket_id, ticket_code, guest, ticket_type, event, status, created_at } = ticketData;
 
-        // Buffer pour stocker le PDF
-        const buffers = [];
-        doc.on('data', buffers.push.bind(buffers));
-        doc.on('end', () => {
-          resolve(Buffer.concat(buffers));
-        });
-        doc.on('error', reject);
+    const fallbackName = guest?.name || '';
+    const [firstName = guest?.first_name || ''] = fallbackName.split(' ');
+    const lastName = guest?.last_name || fallbackName.split(' ').slice(1).join(' ') || '';
 
-        // Arrière-plan décoratif
-        doc.rect(0, 0, doc.page.width, doc.page.height)
-           .fill('#f8f9fa');
+    const mappedTicket = {
+      id: ticket_id || ticketData.id,
+      type: ticket_type?.name || ticketData.type || 'Standard',
+      price: ticket_type?.price ?? ticketData.price ?? 0,
+      status: status || ticketData.status || 'active',
+      createdAt: created_at || ticketData.createdAt || new Date().toISOString()
+    };
 
-        // En-tête avec dégradé manuel
-        const gradient = doc.linearGradient(0, 0, doc.page.width, 120);
-        gradient.stop(0, '#667eea')
-                .stop(1, '#764ba2');
-        doc.rect(0, 0, doc.page.width, 120)
-           .fill(gradient);
+    const mappedEvent = {
+      id: event?.id || ticketData.event_id,
+      title: event?.title || 'Événement',
+      event_date: event?.date || event?.event_date || null,
+      location: event?.location || 'Non spécifié'
+    };
 
-        // Titre de l'événement
-        doc.fontSize(24)
-           .font('Helvetica-Bold')
-           .fillColor('#ffffff')
-           .text('TICKET D\'ÉVÉNEMENT', 40, 40);
-        
-        doc.fontSize(16)
-           .font('Helvetica-Bold')
-           .fillColor('#ffffff')
-           .text(`${event.title}`, 40, 80, { width: doc.page.width - 80 });
+    const mappedUser = {
+      id: guest?.id || ticketData.user_id,
+      first_name: guest?.first_name || firstName || 'Participant',
+      last_name: guest?.last_name || lastName || '',
+      email: guest?.email || '',
+      phone: guest?.phone || ''
+    };
 
-        // Conteneur principal avec bordure arrondie
-        const containerY = 140;
-        const containerHeight = 400;
-        
-        // Ombre portée
-        doc.rect(42, containerY + 2, doc.page.width - 84, containerHeight)
-           .fill('#00000010');
-        
-        // Conteneur blanc
-        doc.rect(40, containerY, doc.page.width - 80, containerHeight)
-           .fill('#ffffff')
-           .lineWidth(2)
-           .strokeColor('#e1e4e8')
-           .stroke();
+    const pdfResult = await pdfService.generateTicketPDF(mappedTicket, mappedEvent, mappedUser);
 
-        // Section gauche - Informations (mise en page sécurisée)
-        const leftX = 60;
-        const rightColumnWidth = 190;
-        const leftWidth = (doc.page.width - 80) - rightColumnWidth;
-        let currentY = containerY + 32;
+    if (!pdfResult.success) {
+      throw new Error(pdfResult.error || 'PDF generation failed');
+    }
 
-        // Titre section
-        doc.fontSize(16)
-           .font('Helvetica-Bold')
-           .fillColor('#2c3e50')
-           .text('INFORMATIONS DU TICKET', leftX, currentY, { width: leftWidth });
-
-        currentY += 26;
-
-        const ticketInfo = [
-          { label: 'Code ticket', value: ticket_code },
-          { label: 'Nom complet', value: guest.name },
-          { label: 'Email', value: guest.email },
-          { label: 'Type ticket', value: ticket_type.name },
-          { label: 'Lieu événement', value: event.location },
-          { label: 'Date événement', value: new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }
-        ];
-
-        const writeField = (label, value) => {
-          doc.fontSize(10)
-             .font('Helvetica-Bold')
-             .fillColor('#6b7280')
-             .text(`${label}:`, leftX, currentY, { width: leftWidth });
-
-          currentY += doc.heightOfString(`${label}:`, { width: leftWidth }) + 2;
-
-          const safeValue = value ? String(value) : '-';
-          doc.fontSize(11)
-             .font('Helvetica')
-             .fillColor('#1f2937')
-             .text(safeValue, leftX, currentY, { width: leftWidth });
-
-          currentY += doc.heightOfString(safeValue, { width: leftWidth }) + 8;
-        };
-
-        ticketInfo.forEach(info => writeField(info.label, info.value));
-
-        // Section droite - QR Code
-        const qrX = doc.page.width - 60 - rightColumnWidth;
-        const qrY = containerY + 32;
-
-        try {
-          const qrCodeData = await this.generateQRCode(ticket_code, 'base64', 'medium');
-          
-          // Extraire les données base64 du QR code
-          const base64Data = qrCodeData.replace(/^data:image\/png;base64,/, '');
-          const qrImageBuffer = Buffer.from(base64Data, 'base64');
-          
-          // Fond pour le QR code
-          doc.rect(qrX - 10, qrY - 10, 170, 210)
-             .fill('#f8f9fa')
-             .lineWidth(1)
-             .strokeColor('#e1e4e8')
-             .stroke();
-          
-          // Ajouter le QR code
-          doc.image(qrImageBuffer, qrX, qrY, { width: 150, height: 150 });
-          
-          // Texte sous le QR code
-          doc.fontSize(11)
-             .font('Helvetica-Bold')
-             .fillColor('#2c3e50')
-             .text('Scannez pour', qrX + 15, qrY + 160, { width: 120, align: 'center' });
-          
-          doc.fontSize(11)
-             .font('Helvetica-Bold')
-             .fillColor('#667eea')
-             .text('valider l\'entrée', qrX + 15, qrY + 175, { width: 120, align: 'center' });
-          
-        } catch (qrError) {
-          console.warn('[TICKET_GENERATION] Erreur intégration QR code:', qrError.message);
-          
-          // Placeholder stylisé
-          doc.rect(qrX - 10, qrY - 10, 170, 210)
-             .fill('#f8f9fa')
-             .lineWidth(1)
-             .strokeColor('#e1e4e8')
-             .stroke();
-          
-          doc.fontSize(12)
-             .fillColor('#7f8c8d')
-             .text('QR Code', qrX + 50, qrY + 70, { width: 50, align: 'center' });
-          
-          doc.fontSize(10)
-             .fillColor('#7f8c8d')
-             .text('temporairement', qrX + 50, qrY + 85, { width: 50, align: 'center' });
-          
-          doc.fontSize(10)
-             .fillColor('#7f8c8d')
-             .text('indisponible', qrX + 50, qrY + 100, { width: 50, align: 'center' });
-        }
-
-        // Pied de page stylisé
-        const footerY = containerY + containerHeight + 30;
-        
-        // Ligne de séparation
-        doc.moveTo(60, footerY)
-           .lineTo(doc.page.width - 60, footerY)
-           .lineWidth(1)
-           .strokeColor('#e1e4e8')
-           .stroke();
-
-        // Informations pied de page
-        doc.fontSize(9)
-           .font('Helvetica')
-           .fillColor('#7f8c8d')
-           .text(`Ticket généré le: ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 60, footerY + 15);
-        
-        doc.fontSize(10)
-           .font('Helvetica-Bold')
-           .fillColor('#667eea')
-           .text('Ce ticket est personnel et non transférable', 60, footerY + 30);
-
-        // Finaliser le document
-        doc.end();
-
-      } catch (error) {
-        reject(error);
-      }
-    });
+    return pdfResult.pdfBuffer;
   }
 
   /**

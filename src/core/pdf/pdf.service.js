@@ -558,48 +558,51 @@ class PDFService {
       // Ajouter les métadonnées
       doc.info.Title = `Batch Tickets - ${eventData.title}`;
       doc.info.Subject = `Batch admission tickets for ${eventData.title}`;
-      
-      let yPosition = doc.page.height - this.defaultOptions.margins.top;
-      
-      // Page de garde
-      doc.fontSize(20)
-         .font('Helvetica-Bold')
-         .fillColor(this.theme.text)
-         .text('LOT DE TICKETS', doc.page.width / 2 - 80, yPosition, { align: 'center' });
-      
-      yPosition += 40;
-      
-      doc.fontSize(14)
-         .font('Helvetica')
-         .fillColor(this.theme.muted)
-         .text(`Événement: ${eventData.title}`, doc.page.width / 2 - 100, yPosition, { align: 'center' });
-      
-      yPosition += 20;
-      doc.text(`Nombre de tickets: ${tickets.length}`, doc.page.width / 2 - 80, yPosition, { align: 'center' });
-      
-      yPosition += 30;
-      
-      // Liste des tickets
-      doc.fontSize(12)
-         .font('Helvetica-Bold')
-         .text('Liste des tickets:', this.defaultOptions.margins.left + 50, yPosition);
-      
-      yPosition += 20;
-      
-      tickets.forEach((ticket, index) => {
-        doc.fontSize(10)
-           .font('Helvetica')
-           .text(`${index + 1}. Ticket #${ticket.id} - ${ticket.type || 'Standard'} - ${this.formatPrice(ticket.price)}`, 
-                  this.defaultOptions.margins.left + 70, yPosition);
-        yPosition += 15;
-        
-        // Nouvelle page si nécessaire
-        if (yPosition > doc.page.height - 100) {
+
+      for (let index = 0; index < tickets.length; index += 1) {
+        const ticket = tickets[index];
+        if (index > 0) {
           doc.addPage();
-          yPosition = doc.page.height - this.defaultOptions.margins.top;
         }
-      });
-      
+
+        // Fond de page unifié
+        doc.rect(0, 0, doc.page.width, doc.page.height)
+           .fill(this.theme.page);
+
+        const mappedTicket = {
+          id: ticket.id || ticket.ticket_id,
+          type: ticket.type || ticket.ticket_type?.name || 'Standard',
+          price: ticket.price ?? ticket.ticket_type?.price ?? 0,
+          status: ticket.status || 'active',
+          createdAt: ticket.created_at || ticket.createdAt || new Date().toISOString()
+        };
+
+        const guest = ticket.guest || ticket.user || {};
+        const fallbackName = guest.name || '';
+        const [firstName = guest.first_name || ''] = fallbackName.split(' ');
+        const lastName = guest.last_name || fallbackName.split(' ').slice(1).join(' ') || '';
+
+        const mappedUser = {
+          id: guest.id || ticket.user_id,
+          first_name: guest.first_name || firstName || 'Participant',
+          last_name: guest.last_name || lastName || '',
+          email: guest.email || '',
+          phone: guest.phone || ''
+        };
+
+        const mappedEvent = {
+          id: eventData?.id || ticket.event_id,
+          title: eventData?.title || ticket.event?.title || 'Événement',
+          event_date: eventData?.event_date || eventData?.date || ticket.event?.date || null,
+          location: eventData?.location || ticket.event?.location || 'Non spécifié'
+        };
+
+        const startX = (doc.page.width - this.totalWidth) / 2;
+        const startY = (doc.page.height - this.ticketHeight) / 2;
+
+        await this.drawEventTicketWithStub(doc, mappedTicket, mappedEvent, mappedUser, startX, startY);
+      }
+
       // Finaliser le document
       doc.end();
       
