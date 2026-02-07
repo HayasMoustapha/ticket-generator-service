@@ -93,38 +93,8 @@ function generateChecksum(data) {
  * @returns {Promise<Buffer>} Buffer du PDF généré
  */
 async function generateTicketPDF(ticketData) {
-  const guestName = ticketData?.guest?.name || 'Participant';
-  const [firstName, ...lastParts] = guestName.split(' ');
-
-  const mappedTicket = {
-    id: ticketData.ticket_id,
-    type: ticketData.ticket_type?.name || ticketData.type || 'Standard',
-    price: ticketData.price || null,
-    createdAt: ticketData.created_at || new Date().toISOString()
-  };
-
-  const mappedEvent = {
-    id: ticketData.event?.id || ticketData.event_id,
-    title: ticketData.event?.title || ticketData.render_payload?.event_title || 'Événement',
-    location: ticketData.event?.location || ticketData.render_payload?.venue || 'Non spécifié',
-    event_date: ticketData.event?.date || ticketData.event?.event_date || new Date().toISOString()
-  };
-
-  const mappedUser = {
-    id: ticketData.guest?.id || ticketData.guest_id || null,
-    first_name: firstName || 'Participant',
-    last_name: lastParts.join(' ') || '',
-    email: ticketData.guest?.email || ticketData.render_payload?.guest_email || null,
-    phone: ticketData.guest?.phone || ticketData.render_payload?.guest_phone || null
-  };
-
-  const pdfResult = await pdfService.generateTicketPDF(mappedTicket, mappedEvent, mappedUser);
-
-  if (!pdfResult.success) {
-    throw new Error(pdfResult.error || 'PDF generation failed');
-  }
-
-  return pdfResult.pdfBuffer;
+  const pdfBuffer = await ticketGenerationService.generatePDFContent(ticketData);
+  return pdfBuffer;
 }
 
 /**

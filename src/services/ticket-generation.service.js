@@ -9,6 +9,7 @@ const path = require('path');
 const { database } = require('../config/database');
 const notificationClient = require('../../../shared/clients/notification-client');
 const pdfService = require('../core/pdf/pdf.service');
+const htmlTemplateService = require('../core/templates/html-template.service');
 
 class TicketGenerationService {
   constructor() {
@@ -231,6 +232,48 @@ class TicketGenerationService {
       phone: guest?.phone || ''
     };
 
+    const templatePath = ticketData.template?.source_files_path || null;
+
+    if (templatePath) {
+      // Utiliser un template HTML si fourni (fallback sur le PDF par défaut en cas d'erreur)
+      try {
+        const { workingDir, indexPath, previewPath } = await htmlTemplateService.prepareTemplate(templatePath);
+        try {
+          const html = await htmlTemplateService.loadTemplateContent(indexPath);
+
+          const qrCodeDataUrl = await QRCode.toDataURL(ticket_code || String(ticket_id));
+          const variables = this.buildTemplateVariables({
+            ticketData,
+            mappedTicket,
+            mappedEvent,
+            mappedUser,
+            qrCodeDataUrl
+          });
+
+          const renderedHtml = this.replaceTemplateVariables(html, variables);
+
+          let width = null;
+          let height = null;
+          if (previewPath) {
+            try {
+              const previewMetadata = await require('sharp')(previewPath).metadata();
+              width = previewMetadata.width || null;
+              height = previewMetadata.height || null;
+            } catch (metaError) {
+              console.warn('[TICKET_GENERATION] Preview metadata error:', metaError.message);
+            }
+          }
+
+          const pdfBuffer = await htmlTemplateService.renderTemplateToPdf(renderedHtml, { width, height });
+          return pdfBuffer;
+        } finally {
+          await fs.rm(workingDir, { recursive: true, force: true });
+        }
+      } catch (templateError) {
+        console.warn('[TICKET_GENERATION] Template HTML rendering failed, fallback to default PDF:', templateError.message);
+      }
+    }
+
     const pdfResult = await pdfService.generateTicketPDF(mappedTicket, mappedEvent, mappedUser);
 
     if (!pdfResult.success) {
@@ -238,6 +281,35 @@ class TicketGenerationService {
     }
 
     return pdfResult.pdfBuffer;
+  }
+
+  buildTemplateVariables({ ticketData, mappedTicket, mappedEvent, mappedUser, qrCodeDataUrl }) {
+    const eventDate = mappedEvent.event_date ? new Date(mappedEvent.event_date) : null;
+    const eventDateLabel = eventDate ? eventDate.toISOString().split('T')[0] : '';
+    const eventTimeLabel = eventDate ? eventDate.toISOString().split('T')[1]?.slice(0, 5) : '';
+
+    return {
+      EVENT_TITLE: mappedEvent.title || '',
+      EVENT_TYPE: ticketData.ticket_type?.name || mappedTicket.type || '',
+      EVENT_DATE: eventDateLabel,
+      EVENT_TIME: eventTimeLabel,
+      EVENT_LOCATION: mappedEvent.location || '',
+      GUEST_NAME: `${mappedUser.first_name} ${mappedUser.last_name}`.trim(),
+      GUEST_EMAIL: mappedUser.email || '',
+      TICKET_ID: ticketData.ticket_code || String(mappedTicket.id || ''),
+      QR_CODE: qrCodeDataUrl || '',
+      ORGANIZER_NAME: ticketData.event?.organizer_name || ticketData.render_payload?.organizer_name || '',
+      ISSUED_AT: new Date().toISOString()
+    };
+  }
+
+  replaceTemplateVariables(html, variables) {
+    let output = html;
+    Object.entries(variables).forEach(([key, value]) => {
+      const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
+      output = output.replace(regex, value ?? '');
+    });
+    return output;
   }
 
   /**
