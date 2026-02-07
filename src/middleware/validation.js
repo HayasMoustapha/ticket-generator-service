@@ -121,6 +121,9 @@ const schemas = {
       }),
       description: Joi.string().max(1000).optional().messages({
         'string.max': 'La description ne peut dépasser 1000 caractères'
+      }),
+      organizer_name: Joi.string().max(200).optional().allow('').messages({
+        'string.max': 'Le nom de l\'organisateur ne peut dépasser 200 caractères'
       })
     }).required(),
     userData: Joi.object({
@@ -177,7 +180,8 @@ const schemas = {
       title: Joi.string().min(1).max(200).required(),
       eventDate: Joi.date().iso().required(),
       location: Joi.string().max(200).optional(),
-      description: Joi.string().max(1000).optional()
+      description: Joi.string().max(1000).optional(),
+      organizer_name: Joi.string().max(200).optional().allow('')
     }).required(),
     options: Joi.object({
       priority: Joi.string().valid('low', 'normal', 'high', 'critical').optional(),
@@ -217,7 +221,8 @@ const schemas = {
       title: Joi.string().min(1).max(200).required(),
       eventDate: Joi.date().iso().required(),
       location: Joi.string().max(200).optional(),
-      description: Joi.string().max(1000).optional()
+      description: Joi.string().max(1000).optional(),
+      organizer_name: Joi.string().max(200).optional().allow('')
     }).required(),
     options: Joi.object({
       priority: Joi.string().valid('low', 'normal', 'high', 'critical').optional(),

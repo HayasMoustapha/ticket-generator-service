@@ -21,10 +21,32 @@ class HtmlTemplateService {
       }
 
       await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+      // Forcer un rendu aligné sur le preview (pas de débordement)
+      if (width && height) {
+        await page.addStyleTag({
+          content: `
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              width: ${width}px !important;
+              height: ${height}px !important;
+              overflow: hidden !important;
+            }
+            body > * {
+              max-width: ${width}px;
+              max-height: ${height}px;
+            }
+          `
+        });
+      }
+
+      await page.emulateMediaType('screen');
       const pdfBuffer = await page.pdf({
         printBackground: true,
         width: width ? `${width}px` : undefined,
         height: height ? `${height}px` : undefined,
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
         format: width && height ? undefined : 'A4'
       });
 

@@ -241,16 +241,19 @@ class TicketGenerationService {
         try {
           const html = await htmlTemplateService.loadTemplateContent(indexPath);
 
-          // Générer un QR code PNG local pour éviter l'usage de data:image/*
-          const qrCodePath = path.join(workingDir, `qr_${ticket_code || ticket_id}.png`);
-          await QRCode.toFile(qrCodePath, ticket_code || String(ticket_id), { margin: 1, width: 300 });
+          // Générer un QR code PNG (valeur identique à celle stockée en base)
+          // On injecte un data URL PNG pour éviter les blocages d'accès aux fichiers locaux dans Chromium.
+          const qrPayload = ticketData.qr_code_data || ticketData.qrCodeData || ticket_code || String(ticket_id);
+          const qrBuffer = await QRCode.toBuffer(qrPayload, { margin: 1, width: 300 });
+          const qrCodeDataUrl = `data:image/png;base64,${qrBuffer.toString('base64')}`;
 
           const variables = this.buildTemplateVariables({
             ticketData,
             mappedTicket,
             mappedEvent,
             mappedUser,
-            qrCodePath
+            qrCodePath: null,
+            qrCodeDataUrl
           });
 
           const renderedHtml = this.replaceTemplateVariables(html, variables);
@@ -286,11 +289,11 @@ class TicketGenerationService {
     return pdfResult.pdfBuffer;
   }
 
-  buildTemplateVariables({ ticketData, mappedTicket, mappedEvent, mappedUser, qrCodePath }) {
+  buildTemplateVariables({ ticketData, mappedTicket, mappedEvent, mappedUser, qrCodePath, qrCodeDataUrl }) {
     const eventDate = mappedEvent.event_date ? new Date(mappedEvent.event_date) : null;
     const eventDateLabel = eventDate ? eventDate.toISOString().split('T')[0] : '';
     const eventTimeLabel = eventDate ? eventDate.toISOString().split('T')[1]?.slice(0, 5) : '';
-    const qrCodeUrl = qrCodePath ? `file://${qrCodePath}` : '';
+    const qrCodeUrl = qrCodeDataUrl || (qrCodePath ? `file://${qrCodePath}` : '');
 
     return {
       EVENT_TITLE: mappedEvent.title || '',
@@ -302,17 +305,39 @@ class TicketGenerationService {
       GUEST_EMAIL: mappedUser.email || '',
       TICKET_CODE: ticketData.ticket_code || String(mappedTicket.id || ''),
       QR_CODE: qrCodeUrl,
-      ORGANIZER_NAME: ticketData.event?.organizer_name || ticketData.render_payload?.organizer_name || '',
+      ORGANIZER_NAME: ticketData.event?.organizer_name || '',
       ISSUED_AT: new Date().toISOString()
     };
   }
 
   replaceTemplateVariables(html, variables) {
     let output = html;
+
+    // Gérer le QR code de façon robuste:
+    // - Si le template l'utilise déjà en src (ex: <img src="{{QR_CODE}}">), on injecte l'URL.
+    // - Si utilisé dans du CSS (url(...)), on injecte l'URL.
+    // - Sinon on remplace le placeholder par une balise <img> pour éviter un rendu texte brut.
+    if (variables.QR_CODE) {
+      const qrUrl = variables.QR_CODE;
+      const qrSrcRegex = /src=(["'])\s*\{\{\s*QR_CODE\s*\}\}\s*\1/g;
+      output = output.replace(qrSrcRegex, `src="${qrUrl}"`);
+
+      const qrCssUrlRegex = /url\(\s*(["'])?\s*\{\{\s*QR_CODE\s*\}\}\s*(\1)?\s*\)/g;
+      output = output.replace(qrCssUrlRegex, `url("${qrUrl}")`);
+
+      const qrTokenRegex = /\{\{\s*QR_CODE\s*\}\}/g;
+      output = output.replace(
+        qrTokenRegex,
+        `<img src="${qrUrl}" alt="QR Code" style="width:200px;height:200px;object-fit:contain;" />`
+      );
+    }
+
     Object.entries(variables).forEach(([key, value]) => {
+      if (key === 'QR_CODE') return;
       const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
       output = output.replace(regex, value ?? '');
     });
+
     return output;
   }
 
