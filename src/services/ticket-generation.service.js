@@ -296,7 +296,7 @@ class TicketGenerationService {
       EVENT_LOCATION: mappedEvent.location || '',
       GUEST_NAME: `${mappedUser.first_name} ${mappedUser.last_name}`.trim(),
       GUEST_EMAIL: mappedUser.email || '',
-      TICKET_ID: ticketData.ticket_code || String(mappedTicket.id || ''),
+      TICKET_CODE: ticketData.ticket_code || String(mappedTicket.id || ''),
       QR_CODE: qrCodeDataUrl || '',
       ORGANIZER_NAME: ticketData.event?.organizer_name || ticketData.render_payload?.organizer_name || '',
       ISSUED_AT: new Date().toISOString()
