@@ -241,13 +241,16 @@ class TicketGenerationService {
         try {
           const html = await htmlTemplateService.loadTemplateContent(indexPath);
 
-          const qrCodeDataUrl = await QRCode.toDataURL(ticket_code || String(ticket_id));
+          // Générer un QR code PNG local pour éviter l'usage de data:image/*
+          const qrCodePath = path.join(workingDir, `qr_${ticket_code || ticket_id}.png`);
+          await QRCode.toFile(qrCodePath, ticket_code || String(ticket_id), { margin: 1, width: 300 });
+
           const variables = this.buildTemplateVariables({
             ticketData,
             mappedTicket,
             mappedEvent,
             mappedUser,
-            qrCodeDataUrl
+            qrCodePath
           });
 
           const renderedHtml = this.replaceTemplateVariables(html, variables);
@@ -283,10 +286,11 @@ class TicketGenerationService {
     return pdfResult.pdfBuffer;
   }
 
-  buildTemplateVariables({ ticketData, mappedTicket, mappedEvent, mappedUser, qrCodeDataUrl }) {
+  buildTemplateVariables({ ticketData, mappedTicket, mappedEvent, mappedUser, qrCodePath }) {
     const eventDate = mappedEvent.event_date ? new Date(mappedEvent.event_date) : null;
     const eventDateLabel = eventDate ? eventDate.toISOString().split('T')[0] : '';
     const eventTimeLabel = eventDate ? eventDate.toISOString().split('T')[1]?.slice(0, 5) : '';
+    const qrCodeUrl = qrCodePath ? `file://${qrCodePath}` : '';
 
     return {
       EVENT_TITLE: mappedEvent.title || '',
@@ -297,7 +301,7 @@ class TicketGenerationService {
       GUEST_NAME: `${mappedUser.first_name} ${mappedUser.last_name}`.trim(),
       GUEST_EMAIL: mappedUser.email || '',
       TICKET_CODE: ticketData.ticket_code || String(mappedTicket.id || ''),
-      QR_CODE: qrCodeDataUrl || '',
+      QR_CODE: qrCodeUrl,
       ORGANIZER_NAME: ticketData.event?.organizer_name || ticketData.render_payload?.organizer_name || '',
       ISSUED_AT: new Date().toISOString()
     };
