@@ -119,6 +119,17 @@ router.post('/restart', async (req, res) => {
       userAgent: req.get('User-Agent')
     });
 
+    // Sécurité: éviter de faire tomber le service lors des tests
+    // En prod, on peut autoriser le redémarrage réel via env.
+    if (process.env.ALLOW_QUEUE_RESTART !== 'true') {
+      logger.warn('🔄 Redémarrage désactivé (ALLOW_QUEUE_RESTART != true)');
+      return res.status(200).json({
+        success: true,
+        message: 'Queue restart skipped (disabled by config)',
+        data: { restartedAt: new Date().toISOString(), skipped: true }
+      });
+    }
+
     // Arrêt du service de queue
     await ticketQueueService.shutdown();
     
