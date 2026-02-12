@@ -20,6 +20,7 @@
    - DB + Redis
    - Chemins de stockage des tickets générés
    - `JWT_SECRET` (si utilisé)
+3. Vérifier les permissions d’écriture sur le dossier de stockage
 
 ---
 
@@ -44,4 +45,3 @@ npm run start
 ```
 GET http://localhost:3004/api/health
 ```
-
