@@ -211,6 +211,11 @@ class TicketGeneratorServer {
     // 📋 ROUTES QUEUES - Gestion des files d'attente
     this.app.use('/api/queues', queuesRoutes);
 
+    // Documentation Swagger — http://localhost:3004/docs
+    const { specs: swaggerSpecs, swaggerUi, swaggerUiOptions } = require('./config/swagger');
+    this.app.use('/docs', swaggerUi.serve);
+    this.app.get('/docs', swaggerUi.setup(swaggerSpecs, swaggerUiOptions));
+
     // 🚫 ROUTE 404 - Gestion des routes non trouvées
     // Route par défaut pour les URLs qui n'existent pas
     this.app.use((req, res) => {
