@@ -86,9 +86,9 @@ class TicketGeneratorServer {
     // Restreint les origines au Core Service uniquement
     // Permet à event-planner-core d'appeler ce service
     this.app.use(cors({
-      origin: process.env.CORS_ORIGIN || 'http://localhost:3001',  // Core Service uniquement
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Méthodes HTTP autorisées
-      allowedHeaders: ['Content-Type', 'X-API-Key']  // En-têtes autorisés
+      origin: [process.env.CORS_ORIGIN || 'http://localhost:3001', 'http://localhost:3099'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
     }));
 
     // � COMPRESSION DES RÉPONSES
