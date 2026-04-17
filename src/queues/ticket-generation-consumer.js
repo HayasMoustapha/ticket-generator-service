@@ -277,8 +277,9 @@ async function processTicketGenerationJob(job) {
       qrCodeData: ticket.qr_code_data,
       fileUrl: ticket.file_url,
       filePath: ticket.file_path,
-      generatedAt: ticket.generated_at,
-      success: ticket.status === 'completed'
+      generatedAt: ticket.generated_at || ticket.processed_at,
+      errorMessage: ticket.error,
+      success: ticket.status === 'success' || ticket.status === 'completed'
     }));
 
     const webhookData = {

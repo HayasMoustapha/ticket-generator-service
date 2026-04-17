@@ -34,7 +34,14 @@ class TicketsController {
   async generateQRCode(req, res, next) {
     try {
       // Extraction des données envoyées dans le corps de la requête
-      const { ticketCode, ticketId, eventId, format = 'base64', size = 'medium' } = req.body;
+      const {
+        ticketCode,
+        ticketId,
+        eventId,
+        ticketType = 'standard',
+        format = 'base64',
+        size = 'medium'
+      } = req.body;
       
       // Vérification que les données obligatoires sont présentes
       if (!ticketCode || !ticketId) {
@@ -48,7 +55,7 @@ class TicketsController {
         id: ticketId,           // Identifiant unique du ticket
         eventId: eventId || null, // Identifiant de l'événement (peut être null)
         code: ticketCode,       // Code unique du ticket
-        type: 'TICKET'         // Type de QR code
+        type: String(ticketType).trim().toLowerCase() || 'standard'
       };
 
       // Configuration des options de génération du QR code
@@ -332,13 +339,18 @@ class TicketsController {
         eventId: eventData.id
       });
 
+      const pdfBase64 =
+        pdfResult.pdfBase64 ||
+        (pdfResult.pdfBuffer ? pdfResult.pdfBuffer.toString('base64') : null);
+      const generatedAt = pdfResult.generatedAt || new Date().toISOString();
+
       // Retour du PDF généré avec succès
       return res.status(201).json(
         createdResponse('PDF généré avec succès', {
           ticketId: ticketData.id,
           filename: pdfResult.filename,
-          pdfBase64: pdfResult.pdfBase64,
-          generatedAt: pdfResult.generatedAt
+          pdfBase64,
+          generatedAt
         })
       );
     } catch (error) {

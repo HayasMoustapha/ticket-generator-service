@@ -6,17 +6,55 @@
 const Redis = require('ioredis');
 const ticketGenerationService = require('./ticket-generation.service');
 
+function sanitizeRedisPassword(value) {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = String(value).trim();
+  if (!normalized || normalized.startsWith('your_')) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 class RedisQueueService {
   constructor() {
     this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: process.env.REDIS_PORT || 6379,
+      host:
+        process.env.TICKET_GENERATION_QUEUE_HOST ||
+        process.env.REDIS_QUEUE_HOST ||
+        process.env.REDIS_HOST ||
+        'localhost',
+      port: parseInt(
+        process.env.TICKET_GENERATION_QUEUE_PORT ||
+          process.env.REDIS_QUEUE_PORT ||
+          process.env.REDIS_PORT ||
+          '6379',
+        10,
+      ),
+      password: sanitizeRedisPassword(
+        process.env.TICKET_GENERATION_QUEUE_PASSWORD ||
+          process.env.REDIS_QUEUE_PASSWORD ||
+          process.env.REDIS_PASSWORD,
+      ),
+      db: parseInt(
+        process.env.TICKET_GENERATION_QUEUE_DB ||
+          process.env.REDIS_QUEUE_DB ||
+          process.env.REDIS_DB ||
+          '4',
+        10,
+      ),
       retryDelayOnFailover: 100,
-      maxRetriesPerRequest: 3
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+      enableReadyCheck: false,
     });
 
-    this.queueName = 'ticket-generation';
-    this.responseQueueName = 'ticket-generation-response';
+    this.queueName = process.env.TICKET_GENERATION_LIST_NAME || 'ticket-generation';
+    this.responseQueueName =
+      process.env.TICKET_GENERATION_RESPONSE_LIST_NAME || 'ticket-generation-response';
     
     this.setupEventHandlers();
   }

@@ -24,8 +24,8 @@ class TicketQueueService {
     this.redisConfig = {
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT) || 6379,
-      password: process.env.REDIS_PASSWORD || undefined,
-      db: parseInt(process.env.REDIS_DB) || 4,
+      password: process.env.TICKET_GENERATION_QUEUE_PASSWORD || process.env.REDIS_PASSWORD || undefined,
+      db: parseInt(process.env.TICKET_GENERATION_QUEUE_DB || process.env.REDIS_DB) || 4,
       retryDelayOnFailover: 100,
       maxRetriesPerRequest: 3,
       lazyConnect: true
@@ -121,6 +121,7 @@ class TicketQueueService {
    * Configure les consumers pour traiter les messages
    */
   setupConsumers() {
+    if (process.env.ENABLE_LEGACY_TICKET_QUEUE_CONSUMER === 'true') {
     // ========================================
     // 🎫 CONSUMER: Génération de tickets
     // ========================================
@@ -226,6 +227,11 @@ class TicketQueueService {
         throw error;
       }
     });
+    } else {
+      logger.info('⏭️ Legacy ticket queue consumer disabled; dedicated generate-tickets worker is active', {
+        version: '1.0.0'
+      });
+    }
 
     logger.info('👂 Consumers configurés');
   }

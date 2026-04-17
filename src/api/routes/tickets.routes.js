@@ -29,6 +29,8 @@ const generateQRCodeSchema = Joi.object({
   ticketId: Joi.string().required(),
   // eventId : Identifiant de l'événement (optionnel)
   eventId: Joi.string().optional(),
+  // ticketType : Type métier du ticket utilisé dans le payload QR
+  ticketType: Joi.string().valid('standard', 'vip', 'premium', 'early-bird', 'student', 'staff').default('standard'),
   // format : Format du QR code (base64, png, svg, pdf) - par défaut base64
   format: Joi.string().valid('base64', 'png', 'svg', 'pdf').default('base64'),
   // size : Taille du QR code (small, medium, large) - par défaut medium
