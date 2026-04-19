@@ -5,6 +5,8 @@
 const qrCodeService = require('../../core/qrcode/qrcode.service');
 // pdfService : Service pour générer les PDFs
 const pdfService = require('../../core/pdf/pdf.service');
+const ticketGenerationService = require('../../services/ticket-generation.service');
+const QRCode = require('qrcode');
 // batchService : Service pour gérer les traitements en lot
 const batchService = require('../../core/database/batch.service');
 // Fonctions utilitaires pour formater les réponses API
@@ -12,6 +14,76 @@ const { successResponse, errorResponse, createdResponse } = require('../../utils
 // Logger pour enregistrer les événements et erreurs
 const logger = require('../../utils/logger');
 const fs = require('fs').promises;
+
+function resolveCoreServiceBaseUrl() {
+  return process.env.CORE_SERVICE_URL || process.env.EVENT_CORE_SERVICE_URL || 'http://localhost:3001';
+}
+
+function buildInternalCoreHeaders() {
+  const headers = {
+    Accept: 'application/json'
+  };
+
+  if (process.env.SHARED_SERVICE_TOKEN) {
+    headers['X-Service-Token'] = process.env.SHARED_SERVICE_TOKEN;
+  }
+
+  return headers;
+}
+
+function decodeDataUrlBuffer(value) {
+  const normalized = value.includes(',') ? value.split(',').pop() : value;
+  return Buffer.from(normalized || '', 'base64');
+}
+
+async function fetchEnrichedTicket(ticketId) {
+  const response = await fetch(
+    `${resolveCoreServiceBaseUrl()}/api/internal/tickets/${encodeURIComponent(String(ticketId))}/enriched`,
+    {
+      method: 'GET',
+      headers: buildInternalCoreHeaders()
+    }
+  );
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || payload?.success === false || !payload?.data) {
+    throw new Error(
+      payload?.error ||
+      payload?.message ||
+      `Enriched ticket lookup failed with status ${response.status}`
+    );
+  }
+
+  return payload.data;
+}
+
+async function buildTicketPdfBuffer(ticketId) {
+  const enrichedTicket = await fetchEnrichedTicket(ticketId);
+  const pdfBuffer = await ticketGenerationService.generatePDFContent(enrichedTicket);
+  return { enrichedTicket, pdfBuffer };
+}
+
+async function buildTicketQrBuffer(ticketId) {
+  const enrichedTicket = await fetchEnrichedTicket(ticketId);
+  const qrValue = enrichedTicket.qr_code_data || enrichedTicket.ticket_code || String(enrichedTicket.ticket_id || ticketId);
+
+  if (typeof qrValue === 'string' && qrValue.trim().startsWith('data:image/')) {
+    return {
+      enrichedTicket,
+      qrBuffer: decodeDataUrlBuffer(qrValue.trim())
+    };
+  }
+
+  const qrPayload = typeof qrValue === 'string' ? qrValue : JSON.stringify(qrValue);
+  const qrBuffer = await QRCode.toBuffer(qrPayload, {
+    type: 'png',
+    width: 512,
+    margin: 1
+  });
+
+  return { enrichedTicket, qrBuffer };
+}
 
 /**
  * 🎫 CONTRÔLEUR POUR LA GÉNÉRATION DE TICKETS
@@ -434,68 +506,52 @@ class TicketsController {
    */
   async getTicketQRCode(req, res, next) {
     try {
-      // Extraction de l'ID du ticket depuis les paramètres de l'URL
       const { ticketId } = req.params;
-      
-      // Simulation de récupération du QR code (remplacer par logique réelle)
-      const qrCodeData = 'simulated_qr_code_data';
-      
-      // Retour du QR code
-      return res.status(200).json(
-        successResponse('QR code récupéré avec succès', {
-          ticketId,
-          qrCodeData,
-          retrievedAt: new Date().toISOString()
-        })
-      );
+      const { qrBuffer } = await buildTicketQrBuffer(ticketId);
+
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.setHeader('Content-Length', qrBuffer.length);
+      res.send(qrBuffer);
     } catch (error) {
-      // En cas d'erreur, on l'enregistre dans les logs
       logger.error('Get QR code failed', {
+        ticketId: req.params.ticketId,
         error: error.message,
         stack: error.stack
       });
-      // Passage de l'erreur au middleware de gestion d'erreurs
       next(error);
     }
   }
 
-  /**
-   * Récupère le PDF d'un ticket existant
-   * @param {Object} req - Requête Express avec l'ID du ticket
-   * @param {Object} res - Réponse Express pour retourner le PDF
-   * @param {Function} next - Middleware suivant en cas d'erreur
-   */
   async getTicketPDF(req, res, next) {
     try {
-      // Extraction de l'ID du ticket depuis les paramètres de l'URL
       const { ticketId } = req.params;
-      
-      // Simulation de récupération du PDF (remplacer par logique réelle)
-      const pdfData = 'simulated_pdf_data';
-      
-      // Retour du PDF
+      const { enrichedTicket, pdfBuffer } = await buildTicketPdfBuffer(ticketId);
+
       return res.status(200).json(
-        successResponse('PDF récupéré avec succès', {
+        successResponse('PDF retrieved successfully', {
           ticketId,
-          pdfData,
+          ticketCode: enrichedTicket.ticket_code,
+          filename: `${enrichedTicket.ticket_code || `ticket-${ticketId}`}.pdf`,
+          pdfBase64: pdfBuffer.toString('base64'),
+          pdfData: pdfBuffer.toString('base64'),
           retrievedAt: new Date().toISOString()
         })
       );
     } catch (error) {
-      // En cas d'erreur, on l'enregistre dans les logs
       logger.error('Get PDF failed', {
+        ticketId: req.params.ticketId,
         error: error.message,
         stack: error.stack
       });
-      // Passage de l'erreur au middleware de gestion d'erreurs
       next(error);
     }
   }
 
   /**
-   * Récupère les détails complets d'un ticket
-   * @param {Object} req - Requête Express avec l'ID du ticket
-   * @param {Object} res - Réponse Express pour retourner les détails
+   * R??cup??re les d??tails complets d'un ticket
+   * @param {Object} req - Requ??te Express avec l'ID du ticket
+   * @param {Object} res - R??ponse Express pour retourner les d??tails
    * @param {Function} next - Middleware suivant en cas d'erreur
    */
   async getTicketDetails(req, res, next) {
@@ -707,75 +763,18 @@ class TicketsController {
   async downloadTicket(req, res, next) {
     try {
       const { ticketId } = req.params;
-      
-      // Récupérer les détails du ticket
-      const ticketDetails = await batchService.getTicketDetails(ticketId);
-      
-      if (!ticketDetails.success) {
-        return res.status(404).json(
-          errorResponse('Ticket non trouvé', null, 'TICKET_NOT_FOUND')
-        );
-      }
+      const { enrichedTicket, pdfBuffer } = await buildTicketPdfBuffer(ticketId);
 
-      // Si un PDF généré existe, le servir directement (garantit la cohérence)
-      if (ticketDetails.data.pdfFilePath) {
-        try {
-          const pdfBuffer = await fs.readFile(ticketDetails.data.pdfFilePath);
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `attachment; filename="ticket-${ticketId}.pdf"`);
-          res.send(pdfBuffer);
-          logger.info('Ticket downloaded from stored file', { ticketId });
-          return;
-        } catch (fileError) {
-          logger.warn('Stored PDF not found, fallback to regeneration', {
-            ticketId,
-            error: fileError.message
-          });
-        }
-      }
-
-      const ticketData = {
-        id: ticketDetails.data.ticketId || ticketId,
-        eventId: ticketDetails.data.eventId || 'event_1',
-        userId: ticketDetails.data.userId || '1',
-        type: ticketDetails.data.ticketType || 'standard',
-        attendeeName: ticketDetails.data.attendeeName || 'Participant',
-        attendeeEmail: ticketDetails.data.attendeeEmail || 'participant@example.com',
-        attendeePhone: ticketDetails.data.attendeePhone || null,
-        eventTitle: ticketDetails.data.eventTitle || 'Événement',
-        eventDate: ticketDetails.data.eventDate || new Date().toISOString(),
-        location: ticketDetails.data.location || 'Non spécifié'
-      };
-
-      const eventData = {
-        id: ticketData.eventId,
-        title: ticketData.eventTitle,
-        eventDate: ticketData.eventDate,
-        location: ticketData.location
-      };
-
-      const userData = {
-        first_name: ticketData.attendeeName.split(' ')[0] || 'Participant',
-        last_name: ticketData.attendeeName.split(' ').slice(1).join(' ') || '',
-        email: ticketData.attendeeEmail,
-        phone: ticketData.attendeePhone
-      };
-
-      // Générer le PDF du ticket
-      const pdfResult = await pdfService.generateTicketPDF(ticketData, eventData, userData);
-      
-      if (!pdfResult.success) {
-        return res.status(500).json(
-          errorResponse('Échec de génération du PDF', null, 'PDF_GENERATION_FAILED')
-        );
-      }
-
-      // Envoyer le fichier PDF
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="ticket-${ticketId}.pdf"`);
-      res.send(pdfResult.pdfBuffer);
-      
-      logger.info('Ticket downloaded successfully', { ticketId });
+      res.setHeader('Content-Disposition', `attachment; filename="${enrichedTicket.ticket_code || `ticket-${ticketId}`}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      res.send(pdfBuffer);
+
+      logger.info('Ticket downloaded successfully', {
+        ticketId,
+        templateId: enrichedTicket.template?.id || null,
+        templateSource: enrichedTicket.template?.source_files_path || null
+      });
     } catch (error) {
       logger.error('Ticket download failed', {
         ticketId: req.params.ticketId,
@@ -795,40 +794,13 @@ class TicketsController {
   async getTicketQR(req, res, next) {
     try {
       const { ticketId } = req.params;
-      
-      // Récupérer les détails du ticket
-      const ticketDetails = await batchService.getTicketDetails(ticketId);
-      
-      if (!ticketDetails.success) {
-        return res.status(404).json(
-          errorResponse('Ticket non trouvé', null, 'TICKET_NOT_FOUND')
-        );
-      }
+      const { qrBuffer } = await buildTicketQrBuffer(ticketId);
 
-      const ticketData = {
-        id: ticketDetails.data.ticketId || ticketId,
-        eventId: ticketDetails.data.eventId || 'event_1',
-        userId: ticketDetails.data.userId || '1',
-        type: ticketDetails.data.ticketType || 'standard'
-      };
-
-      // Générer le code QR du ticket
-      const qrResult = await qrCodeService.generateTicketQRCode(ticketData, {
-        size: 'medium',
-        format: 'png'
-      });
-      
-      if (!qrResult.success) {
-        return res.status(500).json(
-          errorResponse('Échec de génération du code QR', null, 'QR_GENERATION_FAILED')
-        );
-      }
-
-      // Envoyer l'image du code QR
       res.setHeader('Content-Type', 'image/png');
-      res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache 1 heure
-      res.send(qrResult.qrCodeBuffer);
-      
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.setHeader('Content-Length', qrBuffer.length);
+      res.send(qrBuffer);
+
       logger.info('Ticket QR generated successfully', { ticketId });
     } catch (error) {
       logger.error('Ticket QR generation failed', {
