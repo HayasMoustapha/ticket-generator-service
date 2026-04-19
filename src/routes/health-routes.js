@@ -1,12 +1,12 @@
-/**
+﻿/**
  * Routes de health check et monitoring pour ticket-generator-service
- * Ces routes permettent de monitorer l'état du service et ses métriques
+ * Ces routes permettent de monitorer l'Ã©tat du service et ses mÃ©triques
  * 
  * Routes :
  * GET /health - Health check simple
- * GET /health/detailed - Health check détaillé
- * GET /metrics - Métriques de performance
- * GET /status - État complet du service
+ * GET /health/detailed - Health check dÃ©taillÃ©
+ * GET /metrics - MÃ©triques de performance
+ * GET /status - Ã‰tat complet du service
  */
 
 const express = require('express');
@@ -17,17 +17,18 @@ const { healthCheck, getMetrics, getServiceState } = require('../services/ticket
  * @route GET /health
  * @desc Health check simple du service
  * @access Public
- * @returns {Object} État de santé basique
+ * @returns {Object} Ã‰tat de santÃ© basique
  */
 router.get('/health', (req, res) => {
   try {
     const health = healthCheck();
     
-    // Code HTTP basé sur l'état de santé
-    const statusCode = health.status === 'healthy' ? 200 : 503;
+    // Code HTTP basÃ© sur l'Ã©tat de santÃ©
+    const isReachable = health.status === 'healthy' || health.status === 'degraded';
+    const statusCode = isReachable ? 200 : 503;
     
     res.status(statusCode).json({
-      success: health.status === 'healthy',
+      success: isReachable,
       data: health,
       timestamp: new Date().toISOString()
     });
@@ -44,23 +45,24 @@ router.get('/health', (req, res) => {
 
 /**
  * @route GET /health/detailed
- * @desc Health check détaillé avec tous les composants
+ * @desc Health check dÃ©taillÃ© avec tous les composants
  * @access Public
- * @returns {Object} État de santé détaillé
+ * @returns {Object} Ã‰tat de santÃ© dÃ©taillÃ©
  */
 router.get('/health/detailed', (req, res) => {
   try {
     const state = getServiceState();
     
-    // Détermination du statut global
-    const isHealthy = state.status === 'running' && 
-                     state.components.redis.connected && 
-                     state.components.consumer.started;
+    // DÃ©termination du statut global
+    const isReachable =
+      state.status === 'running' &&
+      (state.components.redis.connected || state.components.queueMode.degraded) &&
+      (state.components.consumer.started || state.components.queueMode.degraded);
     
-    const statusCode = isHealthy ? 200 : 503;
+    const statusCode = isReachable ? 200 : 503;
     
     res.status(statusCode).json({
-      success: isHealthy,
+      success: isReachable,
       data: state,
       timestamp: new Date().toISOString()
     });
@@ -77,9 +79,9 @@ router.get('/health/detailed', (req, res) => {
 
 /**
  * @route GET /metrics
- * @desc Métriques de performance et monitoring
+ * @desc MÃ©triques de performance et monitoring
  * @access Public
- * @returns {Object} Métriques détaillées
+ * @returns {Object} MÃ©triques dÃ©taillÃ©es
  */
 router.get('/metrics', (req, res) => {
   try {
@@ -103,9 +105,9 @@ router.get('/metrics', (req, res) => {
 
 /**
  * @route GET /status
- * @desc État complet du service (alias de /health/detailed)
+ * @desc Ã‰tat complet du service (alias de /health/detailed)
  * @access Public
- * @returns {Object} État complet du service
+ * @returns {Object} Ã‰tat complet du service
  */
 router.get('/status', (req, res) => {
   try {
@@ -129,7 +131,7 @@ router.get('/status', (req, res) => {
 
 /**
  * @route GET /ping
- * @desc Ping simple pour vérifier que le service répond
+ * @desc Ping simple pour vÃ©rifier que le service rÃ©pond
  * @access Public
  * @returns {Object} Pong response
  */
@@ -143,3 +145,4 @@ router.get('/ping', (req, res) => {
 });
 
 module.exports = router;
+

@@ -11,6 +11,19 @@ const logger = require('../../utils/logger');
 const qrCodeService = require('../../core/qrcode/qrcode.service');
 const pdfService = require('../../core/pdf/pdf.service');
 
+function sanitizeRedisPassword(value) {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = String(value).trim();
+  if (!normalized || normalized.startsWith('your_')) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 /**
  * 🎫 SERVICE DE COMMUNICATION REDIS QUEUE
  * Gère la communication asynchrone entre event-planner-core et ticket-generator
@@ -24,7 +37,9 @@ class TicketQueueService {
     this.redisConfig = {
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT) || 6379,
-      password: process.env.TICKET_GENERATION_QUEUE_PASSWORD || process.env.REDIS_PASSWORD || undefined,
+      password: sanitizeRedisPassword(
+        process.env.TICKET_GENERATION_QUEUE_PASSWORD || process.env.REDIS_PASSWORD,
+      ),
       db: parseInt(process.env.TICKET_GENERATION_QUEUE_DB || process.env.REDIS_DB) || 4,
       retryDelayOnFailover: 100,
       maxRetriesPerRequest: 3,

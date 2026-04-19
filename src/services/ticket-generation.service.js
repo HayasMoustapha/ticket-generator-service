@@ -8,7 +8,6 @@ const fs = require('fs').promises;
 const path = require('path');
 const { database } = require('../config/database');
 const notificationClient = require('../../../shared/clients/notification-client');
-const pdfService = require('../core/pdf/pdf.service');
 const htmlTemplateService = require('../core/templates/html-template.service');
 
 class TicketGenerationService {
@@ -233,31 +232,27 @@ class TicketGenerationService {
     };
 
     const templatePath = ticketData.template?.source_files_path || null;
+    const qrPayload = ticketData.qr_code_data || ticketData.qrCodeData || ticket_code || String(ticket_id);
+    const qrBuffer = await QRCode.toBuffer(qrPayload, { margin: 1, width: 300 });
+    const qrCodeDataUrl = `data:image/png;base64,${qrBuffer.toString('base64')}`;
+    const variables = this.buildTemplateVariables({
+      ticketData,
+      mappedTicket,
+      mappedEvent,
+      mappedUser,
+      qrCodePath: null,
+      qrCodeDataUrl
+    });
 
     if (templatePath) {
-      // Utiliser un template HTML si fourni (fallback sur le PDF par défaut en cas d'erreur)
+      // Un template configuré doit rester la source de vérité du rendu PDF.
       try {
-        const { workingDir, indexPath, previewPath } = await htmlTemplateService.prepareTemplate(templatePath);
+        const { workingDir, indexPath, svgPath, previewPath } = await htmlTemplateService.prepareTemplate(templatePath);
         try {
-          const html = await htmlTemplateService.loadTemplateContent(indexPath);
+          const html = indexPath ? await htmlTemplateService.loadTemplateContent(indexPath) : null;
 
           // Générer un QR code PNG (valeur identique à celle stockée en base)
           // On injecte un data URL PNG pour éviter les blocages d'accès aux fichiers locaux dans Chromium.
-          const qrPayload = ticketData.qr_code_data || ticketData.qrCodeData || ticket_code || String(ticket_id);
-          const qrBuffer = await QRCode.toBuffer(qrPayload, { margin: 1, width: 300 });
-          const qrCodeDataUrl = `data:image/png;base64,${qrBuffer.toString('base64')}`;
-
-          const variables = this.buildTemplateVariables({
-            ticketData,
-            mappedTicket,
-            mappedEvent,
-            mappedUser,
-            qrCodePath: null,
-            qrCodeDataUrl
-          });
-
-          const renderedHtml = this.replaceTemplateVariables(html, variables);
-
           let width = null;
           let height = null;
           if (previewPath) {
@@ -270,23 +265,34 @@ class TicketGenerationService {
             }
           }
 
+          if (svgPath) {
+            const svgTemplate = await fs.readFile(svgPath, 'utf8');
+            const renderedSvg = this.replaceTemplateVariables(svgTemplate, variables);
+            return await htmlTemplateService.renderSvgToPdf(renderedSvg, { width, height });
+          }
+
+          if (!html) {
+            throw new Error('index.html manquant dans le template');
+          }
+
+          const renderedHtml = this.replaceTemplateVariables(html, variables);
           const pdfBuffer = await htmlTemplateService.renderTemplateToPdf(renderedHtml, { width, height });
           return pdfBuffer;
         } finally {
           await fs.rm(workingDir, { recursive: true, force: true });
         }
       } catch (templateError) {
-        console.warn('[TICKET_GENERATION] Template HTML rendering failed, fallback to default PDF:', templateError.message);
+        throw new Error(`Configured ticket template rendering failed: ${templateError.message}`);
       }
     }
 
-    const pdfResult = await pdfService.generateTicketPDF(mappedTicket, mappedEvent, mappedUser);
-
-    if (!pdfResult.success) {
-      throw new Error(pdfResult.error || 'PDF generation failed');
+    try {
+      const builderDefaultSvg = this.replaceTemplateVariables(this.buildDefaultBuilderTemplate(), variables);
+      return await htmlTemplateService.renderSvgToPdf(builderDefaultSvg);
+    } catch (builderFallbackError) {
+      console.warn('[TICKET_GENERATION] Builder default PDF rendering failed:', builderFallbackError.message);
+      throw new Error(`Builder-backed ticket PDF rendering failed: ${builderFallbackError.message}`);
     }
-
-    return pdfResult.pdfBuffer;
   }
 
   buildTemplateVariables({ ticketData, mappedTicket, mappedEvent, mappedUser, qrCodePath, qrCodeDataUrl }) {
@@ -322,6 +328,9 @@ class TicketGenerationService {
       const qrSrcRegex = /src=(["'])\s*\{\{\s*QR_CODE\s*\}\}\s*\1/g;
       output = output.replace(qrSrcRegex, `src="${qrUrl}"`);
 
+      const qrHrefRegex = /href=(["'])\s*\{\{\s*QR_CODE\s*\}\}\s*\1/g;
+      output = output.replace(qrHrefRegex, `href="${qrUrl}"`);
+
       const qrCssUrlRegex = /url\(\s*(["'])?\s*\{\{\s*QR_CODE\s*\}\}\s*(\1)?\s*\)/g;
       output = output.replace(qrCssUrlRegex, `url("${qrUrl}")`);
 
@@ -339,6 +348,38 @@ class TicketGenerationService {
     });
 
     return output;
+  }
+
+  buildDefaultBuilderTemplate() {
+    return `
+      <svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420">
+        <defs>
+          <clipPath id="ticket-clip">
+            <rect x="0" y="0" width="760" height="420" rx="28" />
+          </clipPath>
+        </defs>
+        <g clip-path="url(#ticket-clip)">
+          <rect width="760" height="420" fill="#08131D" />
+          <rect x="42" y="34" width="110" height="36" rx="10" fill="#39C98B" />
+          <text x="97" y="57" text-anchor="middle" fill="#08131D" font-family="Nunito, Arial, sans-serif" font-size="16" font-weight="800">TICKET</text>
+          <text x="42" y="140" fill="#FFFFFF" font-family="Nunito, Arial, sans-serif" font-size="42" font-weight="800">{{EVENT_TITLE}}</text>
+          <rect x="42" y="158" width="72" height="6" rx="999" fill="#39C98B" />
+          <text x="42" y="198" fill="rgba(255,255,255,0.68)" font-family="Nunito, Arial, sans-serif" font-size="12" font-weight="700">DATE &amp; TIME</text>
+          <text x="42" y="228" fill="#FFFFFF" font-family="Nunito, Arial, sans-serif" font-size="22" font-weight="700">{{EVENT_DATE}} • {{EVENT_TIME}}</text>
+          <text x="328" y="198" fill="rgba(255,255,255,0.68)" font-family="Nunito, Arial, sans-serif" font-size="12" font-weight="700">VENUE</text>
+          <text x="328" y="228" fill="#FFFFFF" font-family="Nunito, Arial, sans-serif" font-size="22" font-weight="700">{{EVENT_LOCATION}}</text>
+          <line x1="24" y1="253" x2="736" y2="253" stroke="#FFFFFF" stroke-width="2" stroke-dasharray="10 8" opacity="0.34" />
+          <text x="42" y="300" fill="rgba(255,255,255,0.68)" font-family="Nunito, Arial, sans-serif" font-size="14" font-weight="700">GUEST</text>
+          <text x="42" y="338" fill="#FFFFFF" font-family="Nunito, Arial, sans-serif" font-size="30" font-weight="800">{{GUEST_NAME}}</text>
+          <rect x="42" y="344" width="220" height="36" rx="10" fill="#39C98B" />
+          <text x="152" y="367" text-anchor="middle" fill="#08131D" font-family="Nunito, Arial, sans-serif" font-size="15" font-weight="800">{{EVENT_TYPE}}</text>
+          <text x="42" y="406" fill="rgba(255,255,255,0.68)" font-family="'Roboto Mono', monospace" font-size="14" font-weight="700">{{TICKET_CODE}}</text>
+          <rect x="602" y="284" width="120" height="120" rx="18" fill="rgba(255,255,255,0.95)" />
+          <image href="{{QR_CODE}}" x="616" y="298" width="92" height="92" preserveAspectRatio="xMidYMid meet" />
+          <text x="712" y="406" text-anchor="end" fill="rgba(255,255,255,0.68)" font-family="Nunito, Arial, sans-serif" font-size="14" font-weight="700">Event Ticket</text>
+        </g>
+      </svg>
+    `;
   }
 
   /**

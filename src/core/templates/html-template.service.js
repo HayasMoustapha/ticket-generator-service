@@ -6,6 +6,34 @@ const AdmZip = require('adm-zip');
 const puppeteer = require('puppeteer');
 
 class HtmlTemplateService {
+  parseSvgDimensions(svgMarkup) {
+    const viewBoxMatch = svgMarkup.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/i);
+    if (viewBoxMatch) {
+      return {
+        width: Number(viewBoxMatch[1]) || null,
+        height: Number(viewBoxMatch[2]) || null,
+      };
+    }
+
+    const widthHeightMatch = svgMarkup.match(/width="(\d+(?:\.\d+)?)"[^>]*height="(\d+(?:\.\d+)?)"/i);
+    if (widthHeightMatch) {
+      return {
+        width: Number(widthHeightMatch[1]) || null,
+        height: Number(widthHeightMatch[2]) || null,
+      };
+    }
+
+    const heightWidthMatch = svgMarkup.match(/height="(\d+(?:\.\d+)?)"[^>]*width="(\d+(?:\.\d+)?)"/i);
+    if (!heightWidthMatch) {
+      return { width: null, height: null };
+    }
+
+    return {
+      width: Number(heightWidthMatch[2]) || null,
+      height: Number(heightWidthMatch[1]) || null,
+    };
+  }
+
   async renderTemplateToPdf(htmlContent, options = {}) {
     // Rendu HTML → PDF via Chromium headless (puppeteer)
     const { width, height } = options;
@@ -56,6 +84,18 @@ class HtmlTemplateService {
     }
   }
 
+  async renderSvgToPdf(svgMarkup, options = {}) {
+    const dimensions = this.parseSvgDimensions(svgMarkup);
+    const width = options.width || dimensions.width;
+    const height = options.height || dimensions.height;
+    const encodedSvg = Buffer.from(svgMarkup, 'utf8').toString('base64');
+
+    return this.renderTemplateToPdf(
+      `<html><body style="margin:0;background:#ffffff;display:grid;place-items:center;min-height:100vh;"><img alt="Ticket" src="data:image/svg+xml;base64,${encodedSvg}" style="display:block;width:${width || 760}px;height:${height || 420}px;" /></body></html>`,
+      { width, height },
+    );
+  }
+
   async prepareTemplate(sourceFilesPath) {
     if (!sourceFilesPath) {
       throw new Error('source_files_path manquant pour le template');
@@ -81,13 +121,13 @@ class HtmlTemplateService {
     }
 
     const indexPath = await this.findFileRecursive(templateRoot, 'index.html');
-    if (!indexPath) {
-      throw new Error('index.html manquant dans le template');
+    const svgPath = await this.findFileRecursive(templateRoot, 'template.svg');
+    if (!indexPath && !svgPath) {
+      throw new Error('index.html ou template.svg manquant dans le template');
     }
-
     const previewPath = await this.findFileRecursive(templateRoot, 'preview.png');
 
-    return { workingDir, templateRoot, indexPath, previewPath };
+    return { workingDir, templateRoot, indexPath, svgPath, previewPath };
   }
 
   async findFileRecursive(rootDir, filename) {

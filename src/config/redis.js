@@ -1,6 +1,19 @@
 const redis = require('redis');
 const logger = require('../utils/logger');
 
+function sanitizeRedisPassword(value) {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = String(value).trim();
+  if (!normalized || normalized.startsWith('your_')) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 /**
  * Configuration Redis pour le Ticket Generator Service
  * Gère le cache et la protection contre les attaques par replay
@@ -12,7 +25,7 @@ class RedisConfig {
     this.config = {
       host: process.env.REDIS_HOST || 'localhost',
       port: process.env.REDIS_PORT || 6379,
-      password: process.env.REDIS_PASSWORD || undefined,
+      password: sanitizeRedisPassword(process.env.REDIS_PASSWORD),
       db: process.env.REDIS_DB || 0,
       retryDelayOnFailover: 100,
       maxRetriesPerRequest: 3,
