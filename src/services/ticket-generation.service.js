@@ -220,7 +220,10 @@ class TicketGenerationService {
       id: event?.id || ticketData.event_id,
       title: event?.title || 'Événement',
       event_date: event?.date || event?.event_date || null,
-      location: event?.location || 'Non spécifié'
+      location: event?.location || 'Non spécifié',
+      description: event?.description || '',
+      category: event?.category || '',
+      organizer_name: event?.organizer_name || ticketData.event?.organizer_name || ''
     };
 
     const mappedUser = {
@@ -299,20 +302,65 @@ class TicketGenerationService {
     const eventDate = mappedEvent.event_date ? new Date(mappedEvent.event_date) : null;
     const eventDateLabel = eventDate ? eventDate.toISOString().split('T')[0] : '';
     const eventTimeLabel = eventDate ? eventDate.toISOString().split('T')[1]?.slice(0, 5) : '';
+    const eventDateLong = eventDate
+      ? eventDate.toLocaleDateString('fr-FR', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          timeZone: 'UTC'
+        })
+      : '';
+    const eventTimeRichLabel = eventTimeLabel;
+    const guestFirstName = mappedUser.first_name || '';
+    const guestLastName = mappedUser.last_name || '';
+    const guestDisplayName = [guestFirstName, guestLastName].filter(Boolean).join(' ').trim()
+      || ticketData.guest?.name
+      || mappedUser.email
+      || mappedUser.phone
+      || 'Guest';
+    const guestInitials = [guestFirstName, guestLastName]
+      .filter(Boolean)
+      .map((chunk) => chunk.trim().charAt(0).toUpperCase())
+      .join('')
+      || guestDisplayName.trim().charAt(0).toUpperCase();
+    const issuedAt = ticketData.issued_at || mappedTicket.createdAt || new Date().toISOString();
+    const issuedDate = new Date(issuedAt);
+    const invitationCode = ticketData.event_guest?.invitation_code || ticketData.ticket_code || String(mappedTicket.id || '');
+    const organizerName = mappedEvent.organizer_name || ticketData.event?.organizer_name || '';
     const qrCodeUrl = qrCodeDataUrl || (qrCodePath ? `file://${qrCodePath}` : '');
 
     return {
       EVENT_TITLE: mappedEvent.title || '',
+      EVENT_TITLE_UPPER: (mappedEvent.title || '').toUpperCase(),
       EVENT_TYPE: ticketData.ticket_type?.name || mappedTicket.type || '',
       EVENT_DATE: eventDateLabel,
+      EVENT_DATE_LONG: eventDateLong,
       EVENT_TIME: eventTimeLabel,
+      EVENT_TIME_LABEL: eventTimeRichLabel,
       EVENT_LOCATION: mappedEvent.location || '',
-      GUEST_NAME: `${mappedUser.first_name} ${mappedUser.last_name}`.trim(),
+      EVENT_DESCRIPTION: mappedEvent.description || '',
+      EVENT_CATEGORY: mappedEvent.category || '',
+      GUEST_NAME: guestDisplayName,
+      GUEST_DISPLAY_NAME: guestDisplayName,
+      GUEST_FIRST_NAME: guestFirstName,
+      GUEST_LAST_NAME: guestLastName,
       GUEST_EMAIL: mappedUser.email || '',
+      GUEST_PHONE: mappedUser.phone || '',
+      GUEST_INITIALS: guestInitials,
       TICKET_CODE: ticketData.ticket_code || String(mappedTicket.id || ''),
+      TICKET_ID: String(mappedTicket.id || ''),
+      TICKET_TYPE: ticketData.ticket_type?.name || mappedTicket.type || '',
+      INVITATION_CODE: invitationCode,
+      EVENT_GUEST_STATUS: ticketData.event_guest?.status || '',
+      CHECK_IN_STATUS: ticketData.event_guest?.is_present ? 'Checked in' : 'Awaiting check-in',
       QR_CODE: qrCodeUrl,
-      ORGANIZER_NAME: ticketData.event?.organizer_name || '',
-      ISSUED_AT: new Date().toISOString()
+      ORGANIZER_NAME: organizerName,
+      ORGANIZER_LABEL: organizerName ? `Hosted by ${organizerName}` : '',
+      FOOTER_LABEL: organizerName ? `Hosted by ${organizerName}` : 'Event Ticket',
+      ISSUED_AT: issuedAt,
+      ISSUED_DATE: Number.isNaN(issuedDate.getTime()) ? '' : issuedDate.toISOString().split('T')[0],
+      ISSUED_TIME: Number.isNaN(issuedDate.getTime()) ? '' : issuedDate.toISOString().split('T')[1]?.slice(0, 5)
     };
   }
 
@@ -376,7 +424,7 @@ class TicketGenerationService {
           <text x="42" y="406" fill="rgba(255,255,255,0.68)" font-family="'Roboto Mono', monospace" font-size="14" font-weight="700">{{TICKET_CODE}}</text>
           <rect x="602" y="284" width="120" height="120" rx="18" fill="rgba(255,255,255,0.95)" />
           <image href="{{QR_CODE}}" x="616" y="298" width="92" height="92" preserveAspectRatio="xMidYMid meet" />
-          <text x="712" y="406" text-anchor="end" fill="rgba(255,255,255,0.68)" font-family="Nunito, Arial, sans-serif" font-size="14" font-weight="700">Event Ticket</text>
+          <text x="712" y="406" text-anchor="end" fill="rgba(255,255,255,0.68)" font-family="Nunito, Arial, sans-serif" font-size="14" font-weight="700">{{FOOTER_LABEL}}</text>
         </g>
       </svg>
     `;
