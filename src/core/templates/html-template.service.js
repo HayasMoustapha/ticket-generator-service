@@ -91,7 +91,31 @@ class HtmlTemplateService {
     const encodedSvg = Buffer.from(svgMarkup, 'utf8').toString('base64');
 
     return this.renderTemplateToPdf(
-      `<html><body style="margin:0;background:#ffffff;display:grid;place-items:center;min-height:100vh;"><img alt="Ticket" src="data:image/svg+xml;base64,${encodedSvg}" style="display:block;width:${width || 760}px;height:${height || 420}px;" /></body></html>`,
+      `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            html, body {
+              margin: 0;
+              padding: 0;
+              width: ${width || 760}px;
+              height: ${height || 420}px;
+              overflow: hidden;
+              background: transparent;
+            }
+            img {
+              display: block;
+              width: 100%;
+              height: 100%;
+              object-fit: fill;
+            }
+          </style>
+        </head>
+        <body>
+          <img alt="Ticket" src="data:image/svg+xml;base64,${encodedSvg}" />
+        </body>
+      </html>`,
       { width, height },
     );
   }

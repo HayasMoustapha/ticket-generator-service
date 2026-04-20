@@ -256,6 +256,16 @@ class TicketGenerationService {
 
           // Générer un QR code PNG (valeur identique à celle stockée en base)
           // On injecte un data URL PNG pour éviter les blocages d'accès aux fichiers locaux dans Chromium.
+          if (svgPath) {
+            const svgTemplate = await fs.readFile(svgPath, 'utf8');
+            const renderedSvg = this.replaceTemplateVariables(svgTemplate, variables);
+            return await htmlTemplateService.renderSvgToPdf(renderedSvg);
+          }
+
+          if (!html) {
+            throw new Error('index.html manquant dans le template');
+          }
+
           let width = null;
           let height = null;
           if (previewPath) {
@@ -266,16 +276,6 @@ class TicketGenerationService {
             } catch (metaError) {
               console.warn('[TICKET_GENERATION] Preview metadata error:', metaError.message);
             }
-          }
-
-          if (svgPath) {
-            const svgTemplate = await fs.readFile(svgPath, 'utf8');
-            const renderedSvg = this.replaceTemplateVariables(svgTemplate, variables);
-            return await htmlTemplateService.renderSvgToPdf(renderedSvg, { width, height });
-          }
-
-          if (!html) {
-            throw new Error('index.html manquant dans le template');
           }
 
           const renderedHtml = this.replaceTemplateVariables(html, variables);
