@@ -31,10 +31,11 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "NODE_ENV=test jest",
-    "test:watch": "NODE_ENV=test jest --watch",
-    "test:coverage": "NODE_ENV=test jest --coverage",
-    "test:ci": "NODE_ENV=test jest --ci --coverage --watchAll=false"
+    "proof:canonical-builder-pdf-parity": "node scripts/prove-canonical-builder-pdf-parity.mjs",
+    "test": "node scripts/run-jest.cjs",
+    "test:watch": "node scripts/run-jest.cjs --watch",
+    "test:coverage": "node scripts/run-jest.cjs --coverage",
+    "test:ci": "node scripts/run-jest.cjs --ci --coverage --watchAll=false"
   },
   "dependencies": {
     "adm-zip": "^0.5.10",

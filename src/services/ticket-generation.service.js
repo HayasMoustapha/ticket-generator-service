@@ -6,9 +6,11 @@
 const QRCode = require('qrcode');
 const fs = require('fs').promises;
 const path = require('path');
+const AdmZip = require('adm-zip');
 const { database } = require('../config/database');
 const notificationClient = require('../../../shared/clients/notification-client');
 const htmlTemplateService = require('../core/templates/html-template.service');
+const { buildArchivedBuilderTicketSvg } = require('../core/templates/builder-pdf-renderer');
 
 class TicketGenerationService {
   constructor() {
@@ -180,15 +182,17 @@ class TicketGenerationService {
       const filename = `ticket_${ticket_code}_${Date.now()}.pdf`;
       const filepath = path.join(this.outputDir, filename);
 
-      const pdfBuffer = await this.generatePDFContent(ticketData, options);
-      await fs.writeFile(filepath, pdfBuffer);
+      const artifact = await this.generatePDFArtifact(ticketData, options);
+      await fs.writeFile(filepath, artifact.pdfBuffer);
 
       const stats = await fs.stat(filepath);
 
       return {
         url: `/files/tickets/${filename}`,
         path: filepath,
-        size_bytes: stats.size
+        size_bytes: stats.size,
+        renderMode: artifact.renderMode,
+        renderEngine: artifact.renderEngine
       };
 
     } catch (error) {
@@ -201,7 +205,7 @@ class TicketGenerationService {
    * @param {Object} ticketData - Données du ticket
    * @returns {Buffer} Contenu PDF binaire
    */
-  async generatePDFContent(ticketData) {
+  async generatePDFArtifact(ticketData, _options = {}) {
     const { ticket_id, ticket_code, guest, ticket_type, event, status, created_at } = ticketData;
 
     const fallbackName = guest?.name || '';
@@ -210,6 +214,7 @@ class TicketGenerationService {
 
     const mappedTicket = {
       id: ticket_id || ticketData.id,
+      code: ticket_code || ticketData.ticket_code || String(ticket_id || ticketData.id || ''),
       type: ticket_type?.name || ticketData.type || 'Standard',
       price: ticket_type?.price ?? ticketData.price ?? 0,
       status: status || ticketData.status || 'active',
@@ -236,8 +241,9 @@ class TicketGenerationService {
 
     const templatePath = ticketData.template?.source_files_path || null;
     const qrPayload = ticketData.qr_code_data || ticketData.qrCodeData || ticket_code || String(ticket_id);
-    const qrBuffer = await QRCode.toBuffer(qrPayload, { margin: 1, width: 300 });
-    const qrCodeDataUrl = `data:image/png;base64,${qrBuffer.toString('base64')}`;
+    const qrCodeDataUrl = typeof QRCode.toDataURL === 'function'
+      ? await QRCode.toDataURL(qrPayload)
+      : `data:image/png;base64,${(await QRCode.toBuffer(qrPayload, { margin: 1, width: 300 })).toString('base64')}`;
     const variables = this.buildTemplateVariables({
       ticketData,
       mappedTicket,
@@ -250,16 +256,41 @@ class TicketGenerationService {
     if (templatePath) {
       // Un template configuré doit rester la source de vérité du rendu PDF.
       try {
-        const { workingDir, indexPath, svgPath, previewPath } = await htmlTemplateService.prepareTemplate(templatePath);
+        const { workingDir, templateRoot, indexPath, svgPath, previewPath } = await htmlTemplateService.prepareTemplate(templatePath);
         try {
           const html = indexPath ? await htmlTemplateService.loadTemplateContent(indexPath) : null;
 
           // Générer un QR code PNG (valeur identique à celle stockée en base)
           // On injecte un data URL PNG pour éviter les blocages d'accès aux fichiers locaux dans Chromium.
-          if (svgPath) {
-            const svgTemplate = await fs.readFile(svgPath, 'utf8');
-            const renderedSvg = this.replaceTemplateVariables(svgTemplate, variables);
-            return await htmlTemplateService.renderSvgToPdf(renderedSvg);
+          const { templateSvg, builderConfig } = await this.readTemplatePackage({
+            templatePath,
+            templateRoot,
+            svgPath
+          });
+
+          if (builderConfig) {
+            const renderedSvg = this.buildArchivedBuilderLiveSvg({
+              builderConfig,
+              mappedTicket,
+              mappedEvent,
+              guestDisplayName: variables.GUEST_DISPLAY_NAME || variables.GUEST_NAME,
+              qrCodeDataUrl,
+              footerLabel: variables.FOOTER_LABEL
+            });
+            return {
+              pdfBuffer: await htmlTemplateService.renderSvgToPdf(renderedSvg),
+              renderMode: 'archived-builder-manifest',
+              renderEngine: 'chromium-svg-pdf'
+            };
+          }
+
+          if (templateSvg) {
+            const renderedSvg = this.replaceTemplateVariables(templateSvg, variables);
+            return {
+              pdfBuffer: await htmlTemplateService.renderSvgToPdf(renderedSvg),
+              renderMode: 'template-svg',
+              renderEngine: 'chromium-svg-pdf'
+            };
           }
 
           if (!html) {
@@ -279,8 +310,11 @@ class TicketGenerationService {
           }
 
           const renderedHtml = this.replaceTemplateVariables(html, variables);
-          const pdfBuffer = await htmlTemplateService.renderTemplateToPdf(renderedHtml, { width, height });
-          return pdfBuffer;
+          return {
+            pdfBuffer: await htmlTemplateService.renderTemplateToPdf(renderedHtml, { width, height }),
+            renderMode: 'template-html',
+            renderEngine: 'chromium-html-pdf'
+          };
         } finally {
           await fs.rm(workingDir, { recursive: true, force: true });
         }
@@ -291,11 +325,108 @@ class TicketGenerationService {
 
     try {
       const builderDefaultSvg = this.replaceTemplateVariables(this.buildDefaultBuilderTemplate(), variables);
-      return await htmlTemplateService.renderSvgToPdf(builderDefaultSvg);
+      return {
+        pdfBuffer: await htmlTemplateService.renderSvgToPdf(builderDefaultSvg),
+        renderMode: 'default-builder',
+        renderEngine: 'chromium-svg-pdf'
+      };
     } catch (builderFallbackError) {
       console.warn('[TICKET_GENERATION] Builder default PDF rendering failed:', builderFallbackError.message);
       throw new Error(`Builder-backed ticket PDF rendering failed: ${builderFallbackError.message}`);
     }
+  }
+
+  /**
+   * Conserve la compatibilitÃ© des appels qui attendent uniquement un buffer PDF.
+   * @param {Object} ticketData - DonnÃ©es du ticket
+   * @param {Object} options - Options de gÃ©nÃ©ration
+   * @returns {Promise<Buffer>}
+   */
+  async generatePDFContent(ticketData, options = {}) {
+    const artifact = await this.generatePDFArtifact(ticketData, options);
+    return artifact.pdfBuffer;
+  }
+
+  async readTemplatePackage({ templatePath, templateRoot, svgPath }) {
+    if (templatePath && String(templatePath).toLowerCase().endsWith('.zip')) {
+      const archive = new AdmZip(templatePath);
+      const templateEntry = archive
+        .getEntries()
+        .find((entry) => !entry.isDirectory && path.basename(entry.entryName).toLowerCase() === 'template.svg');
+      const manifestEntry = archive
+        .getEntries()
+        .find((entry) => !entry.isDirectory && path.basename(entry.entryName).toLowerCase() === 'manifest.json');
+
+      return {
+        templateSvg: templateEntry ? templateEntry.getData().toString('utf8') : null,
+        builderConfig: manifestEntry
+          ? ((JSON.parse(manifestEntry.getData().toString('utf8')) || {}).builder || null)
+          : null
+      };
+    }
+
+    let builderConfig = null;
+    if (templateRoot) {
+      const manifestPath = await htmlTemplateService.findFileRecursive(templateRoot, 'manifest.json');
+      if (manifestPath) {
+        builderConfig = (JSON.parse(await fs.readFile(manifestPath, 'utf8')) || {}).builder || null;
+      }
+    }
+
+    return {
+      templateSvg: svgPath ? await fs.readFile(svgPath, 'utf8') : null,
+      builderConfig
+    };
+  }
+
+  buildArchivedBuilderLiveSvg({
+    builderConfig,
+    mappedTicket,
+    mappedEvent,
+    guestDisplayName,
+    qrCodeDataUrl,
+    footerLabel
+  }) {
+    return buildArchivedBuilderTicketSvg({
+      builderConfig,
+      liveContent: {
+        title: mappedEvent.title || 'Event ticket',
+        date: this.formatBuilderDate(mappedEvent.event_date),
+        time: this.formatBuilderTime(mappedEvent.event_date),
+        location: mappedEvent.location || 'Location TBD',
+        guest: guestDisplayName || 'Guest',
+        type: mappedTicket.type || 'Standard',
+        footerLabel: footerLabel || 'Event Ticket',
+        ticketCode: mappedTicket.code || String(mappedTicket.id || ''),
+        qrDataUrl: qrCodeDataUrl || null
+      }
+    });
+  }
+
+  formatBuilderDate(value) {
+    if (!value) {
+      return 'Date TBD';
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return 'Date TBD';
+    }
+
+    return date.toISOString().split('T')[0];
+  }
+
+  formatBuilderTime(value) {
+    if (!value) {
+      return 'Time TBD';
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return 'Time TBD';
+    }
+
+    return date.toISOString().split('T')[1]?.slice(0, 5) || 'Time TBD';
   }
 
   buildTemplateVariables({ ticketData, mappedTicket, mappedEvent, mappedUser, qrCodePath, qrCodeDataUrl }) {

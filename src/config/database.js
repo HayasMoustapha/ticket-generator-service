@@ -24,26 +24,32 @@ database.on('error', (err) => {
   });
 });
 
-// Test de connexion
-database.connect()
-  .then(client => {
+async function verifyDatabaseConnection({ logFailure = true } = {}) {
+  try {
+    const client = await database.connect();
     logger.info('Connected to PostgreSQL database', {
       host: databaseConfig.host,
       port: databaseConfig.port,
       database: databaseConfig.database
     });
     client.release();
-  })
-  .catch(err => {
-    logger.error('Failed to connect to database:', {
-      error: err.message,
-      host: databaseConfig.host,
-      port: databaseConfig.port,
-      database: databaseConfig.database
-    });
-  });
+    return true;
+  } catch (err) {
+    if (logFailure) {
+      logger.error('Failed to connect to database:', {
+        error: err.message,
+        host: databaseConfig.host,
+        port: databaseConfig.port,
+        database: databaseConfig.database
+      });
+    }
+
+    return false;
+  }
+}
 
 module.exports = {
   database,
-  databaseConfig
+  databaseConfig,
+  verifyDatabaseConnection
 };

@@ -60,8 +60,8 @@ async function fetchEnrichedTicket(ticketId) {
 
 async function buildTicketPdfBuffer(ticketId) {
   const enrichedTicket = await fetchEnrichedTicket(ticketId);
-  const pdfBuffer = await ticketGenerationService.generatePDFContent(enrichedTicket);
-  return { enrichedTicket, pdfBuffer };
+  const artifact = await ticketGenerationService.generatePDFArtifact(enrichedTicket);
+  return { enrichedTicket, artifact };
 }
 
 async function buildTicketQrBuffer(ticketId) {
@@ -270,7 +270,9 @@ class TicketsController {
             generationResult.pdfData = {
               filename: pdfResult.filename,
               pdfBase64: pdfResult.pdfBase64,
-              generatedAt: pdfResult.generatedAt
+              generatedAt: pdfResult.generatedAt,
+              renderMode: pdfResult.renderMode,
+              renderEngine: pdfResult.renderEngine
             };
           } else {
             logger.warn('PDF generation failed, returning QR only', {
@@ -422,7 +424,9 @@ class TicketsController {
           ticketId: ticketData.id,
           filename: pdfResult.filename,
           pdfBase64,
-          generatedAt
+          generatedAt,
+          renderMode: pdfResult.renderMode,
+          renderEngine: pdfResult.renderEngine
         })
       );
     } catch (error) {
@@ -526,16 +530,18 @@ class TicketsController {
   async getTicketPDF(req, res, next) {
     try {
       const { ticketId } = req.params;
-      const { enrichedTicket, pdfBuffer } = await buildTicketPdfBuffer(ticketId);
+      const { enrichedTicket, artifact } = await buildTicketPdfBuffer(ticketId);
 
       return res.status(200).json(
         successResponse('PDF retrieved successfully', {
           ticketId,
           ticketCode: enrichedTicket.ticket_code,
           filename: `${enrichedTicket.ticket_code || `ticket-${ticketId}`}.pdf`,
-          pdfBase64: pdfBuffer.toString('base64'),
-          pdfData: pdfBuffer.toString('base64'),
-          retrievedAt: new Date().toISOString()
+          pdfBase64: artifact.pdfBuffer.toString('base64'),
+          pdfData: artifact.pdfBuffer.toString('base64'),
+          retrievedAt: new Date().toISOString(),
+          renderMode: artifact.renderMode,
+          renderEngine: artifact.renderEngine
         })
       );
     } catch (error) {
@@ -763,17 +769,21 @@ class TicketsController {
   async downloadTicket(req, res, next) {
     try {
       const { ticketId } = req.params;
-      const { enrichedTicket, pdfBuffer } = await buildTicketPdfBuffer(ticketId);
+      const { enrichedTicket, artifact } = await buildTicketPdfBuffer(ticketId);
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${enrichedTicket.ticket_code || `ticket-${ticketId}`}.pdf"`);
-      res.setHeader('Content-Length', pdfBuffer.length);
-      res.send(pdfBuffer);
+      res.setHeader('Content-Length', artifact.pdfBuffer.length);
+      res.setHeader('x-event-planner-ticket-render-mode', artifact.renderMode);
+      res.setHeader('x-event-planner-ticket-render-engine', artifact.renderEngine);
+      res.send(artifact.pdfBuffer);
 
       logger.info('Ticket downloaded successfully', {
         ticketId,
         templateId: enrichedTicket.template?.id || null,
-        templateSource: enrichedTicket.template?.source_files_path || null
+        templateSource: enrichedTicket.template?.source_files_path || null,
+        renderMode: artifact.renderMode,
+        renderEngine: artifact.renderEngine
       });
     } catch (error) {
       logger.error('Ticket download failed', {

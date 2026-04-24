@@ -3,6 +3,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const qrCodeService = require('../qrcode/qrcode.service');
+const ticketGenerationService = require('../../services/ticket-generation.service');
 const logger = require('../../utils/logger');
 
 /**
@@ -242,35 +243,52 @@ class PDFService {
    */
   async generateTicketPDF(ticketData, eventData, userData, options = {}) {
     try {
-      const doc = new PDFDocument({ ...this.defaultOptions, ...options });
-      
-      // Fond de la page
-      doc.rect(0, 0, doc.page.width, doc.page.height)
-         .fill(this.theme.page);
+      const canonicalTicketData = {
+        ticket_id: ticketData.id || ticketData.ticket_id,
+        ticket_code: ticketData.ticketCode || ticketData.ticket_code || String(ticketData.id || ticketData.ticket_id || ''),
+        type: ticketData.type || ticketData.ticket_type || 'Standard',
+        price: ticketData.price ?? 0,
+        status: ticketData.status || 'active',
+        createdAt: ticketData.createdAt || ticketData.created_at || new Date().toISOString(),
+        qr_code_data: ticketData.qr_code_data || ticketData.qrCodeData || ticketData.ticketCode || ticketData.ticket_code || String(ticketData.id || ticketData.ticket_id || ''),
+        guest: {
+          id: userData.id || ticketData.userId || ticketData.user_id || null,
+          first_name: userData.first_name || 'Participant',
+          last_name: userData.last_name || '',
+          email: userData.email || '',
+          phone: userData.phone || '',
+          name: `${userData.first_name || 'Participant'} ${userData.last_name || ''}`.trim()
+        },
+        ticket_type: {
+          name: ticketData.type || ticketData.ticket_type || 'Standard',
+          price: ticketData.price ?? 0
+        },
+        event: {
+          id: eventData.id || ticketData.eventId || ticketData.event_id || null,
+          title: eventData.title || 'Evenement',
+          date: eventData.eventDate || eventData.event_date || new Date().toISOString(),
+          event_date: eventData.eventDate || eventData.event_date || new Date().toISOString(),
+          location: eventData.location || 'Non specifie',
+          description: eventData.description || '',
+          category: eventData.category || '',
+          organizer_name: eventData.organizer_name || ''
+        },
+        template: ticketData.template || null,
+        event_guest: ticketData.event_guest || null
+      };
 
-      // Ajouter le ticket avec souche détachable au centre de la page
-      const startX = (doc.page.width - this.totalWidth) / 2;
-      const startY = (doc.page.height - this.ticketHeight) / 2;
-      
-      await this.drawEventTicketWithStub(doc, ticketData, eventData, userData, startX, startY);
+      const artifact = await ticketGenerationService.generatePDFArtifact(canonicalTicketData, options);
 
-      // Finaliser le PDF
-      doc.end();
-
-      return new Promise((resolve, reject) => {
-        const buffers = [];
-        doc.on('data', buffers.push.bind(buffers));
-        doc.on('end', () => {
-          const pdfBuffer = Buffer.concat(buffers);
-          resolve({
-            success: true,
-            pdfBuffer,
-            size: pdfBuffer.length,
-            filename: `ticket-${ticketData.id}.pdf`
-          });
-        });
-        doc.on('error', reject);
-      });
+      return {
+        success: true,
+        pdfBuffer: artifact.pdfBuffer,
+        pdfBase64: artifact.pdfBuffer.toString('base64'),
+        size: artifact.pdfBuffer.length,
+        filename: `ticket-${ticketData.id}.pdf`,
+        generatedAt: new Date().toISOString(),
+        renderMode: artifact.renderMode,
+        renderEngine: artifact.renderEngine
+      };
 
     } catch (error) {
       logger.error('Failed to generate ticket PDF', {
