@@ -11,6 +11,9 @@ const QR_MODULES = [
   [76, 94], [82, 94],
 ];
 
+const BUILDER_CANVAS_MIN_SIZE = 64;
+const BUILDER_CANVAS_MAX_SIZE = 8192;
+
 const BUILDER_CANVAS_PRESETS = [
   {
     id: "ticket-landscape",
@@ -19,6 +22,38 @@ const BUILDER_CANVAS_PRESETS = [
     height: 420,
     category: "ticket",
     previewLabel: "760 x 420",
+  },
+  {
+    id: "mini-ticket",
+    label: "Mini Ticket",
+    width: 600,
+    height: 300,
+    category: "ticket",
+    previewLabel: "600 x 300",
+  },
+  {
+    id: "invitation-landscape",
+    label: "Invitation Landscape",
+    width: 1600,
+    height: 1000,
+    category: "invitation",
+    previewLabel: "1600 x 1000",
+  },
+  {
+    id: "invitation-portrait",
+    label: "Invitation Portrait",
+    width: 1200,
+    height: 1800,
+    category: "invitation",
+    previewLabel: "1200 x 1800",
+  },
+  {
+    id: "invitation-square",
+    label: "Invitation Square",
+    width: 1400,
+    height: 1400,
+    category: "invitation",
+    previewLabel: "1400 x 1400",
   },
   {
     id: "flyer-portrait",
@@ -35,6 +70,22 @@ const BUILDER_CANVAS_PRESETS = [
     height: 860,
     category: "pass",
     previewLabel: "540 x 860",
+  },
+  {
+    id: "story-portrait",
+    label: "Story Portrait",
+    width: 1080,
+    height: 1920,
+    category: "story",
+    previewLabel: "1080 x 1920",
+  },
+  {
+    id: "custom",
+    label: "Custom Size",
+    width: 760,
+    height: 420,
+    category: "custom",
+    previewLabel: "Custom",
   },
 ];
 
@@ -56,6 +107,23 @@ const DEFAULT_LAYER_ORDER = [
 function trimOrNull(value) {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized || null;
+}
+
+function normalizeBuilderCanvasSize(canvasSize) {
+  if (!canvasSize || typeof canvasSize !== "object") {
+    return null;
+  }
+
+  const width = Number(canvasSize.width);
+  const height = Number(canvasSize.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return null;
+  }
+
+  return {
+    width: clamp(Math.round(width), BUILDER_CANVAS_MIN_SIZE, BUILDER_CANVAS_MAX_SIZE),
+    height: clamp(Math.round(height), BUILDER_CANVAS_MIN_SIZE, BUILDER_CANVAS_MAX_SIZE),
+  };
 }
 
 function resolveQrPalette(textColor) {
@@ -84,6 +152,34 @@ function escapeSvgText(value) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function resolveBuilderImageFit(value) {
+  if (value === "contain" || value === "fill") {
+    return value;
+  }
+
+  return "cover";
+}
+
+function supportsSurfaceFill(kind, bindingId) {
+  return kind === "shape" || bindingId === "badge" || bindingId === "accent" || bindingId === "type" || bindingId === "qr" || bindingId === "logo";
+}
+
+function supportsSurfaceStroke(kind) {
+  return kind === "shape";
+}
+
+function resolveSvgPreserveAspectRatio(fit) {
+  if (fit === "contain") {
+    return "xMidYMid meet";
+  }
+
+  if (fit === "fill") {
+    return "none";
+  }
+
+  return "xMidYMid slice";
 }
 
 function estimateLineWidth(value, fontSize) {
@@ -162,8 +258,21 @@ function getBuilderLayerBindingId(layer) {
   return "footer";
 }
 
-function getBuilderCanvasPreset(canvasPresetId = "ticket-landscape") {
-  return BUILDER_CANVAS_PRESETS.find((preset) => preset.id === canvasPresetId) || BUILDER_CANVAS_PRESETS[0];
+function getBuilderCanvasPreset(canvasPresetId = "ticket-landscape", canvasSize = null) {
+  const preset =
+    BUILDER_CANVAS_PRESETS.find((candidate) => candidate.id === canvasPresetId) || BUILDER_CANVAS_PRESETS[0];
+  const normalizedCanvasSize = normalizeBuilderCanvasSize(canvasSize);
+
+  if (preset.id === "custom" && normalizedCanvasSize) {
+    return {
+      ...preset,
+      width: normalizedCanvasSize.width,
+      height: normalizedCanvasSize.height,
+      previewLabel: `${normalizedCanvasSize.width} x ${normalizedCanvasSize.height}`,
+    };
+  }
+
+  return preset;
 }
 
 function createDefaultLayer(
@@ -202,7 +311,7 @@ function createDefaultLayer(
 function createDefaultBuilderLayers(canvasPresetId = "ticket-landscape") {
   const canvas = getBuilderCanvasPreset(canvasPresetId);
 
-  if (canvas.id === "flyer-portrait") {
+  if (canvas.id === "flyer-portrait" || canvas.id === "invitation-portrait") {
     return [
       createDefaultLayer("badge", "badge", "Eyebrow", 64, 72, 152, 44, 18, 800),
       createDefaultLayer("title", "title", "Title", 64, 170, 760, 188, 74, 800),
@@ -216,6 +325,23 @@ function createDefaultBuilderLayers(canvasPresetId = "ticket-landscape") {
       createDefaultLayer("qr", "qr", "QR code", 802, 918, 216, 216, 20, 700, "center", 24),
       createDefaultLayer("logo", "logo", "Logo", 896, 72, 120, 120, 20, 700, "center", 24),
       createDefaultLayer("footer", "footer", "Footer", 64, 1280, 952, 36, 20, 700),
+    ];
+  }
+
+  if (canvas.id === "invitation-square") {
+    return [
+      createDefaultLayer("badge", "badge", "Eyebrow", 118, 106, 220, 54, 18, 800),
+      createDefaultLayer("title", "title", "Title", 116, 244, 1168, 216, 72, 800, "center"),
+      createDefaultLayer("accent", "accent", "Accent line", 550, 506, 300, 10, 10, 700, "left", 999),
+      createDefaultLayer("schedule", "info", "Schedule", 146, 614, 430, 160, 34, 700),
+      createDefaultLayer("venue", "info", "Venue", 824, 614, 430, 160, 34, 700, "right"),
+      createDefaultLayer("divider", "divider", "Divider", 118, 826, 1164, 2, 2, 700, "left", 999),
+      createDefaultLayer("guest", "guest", "Guest block", 156, 904, 1088, 162, 48, 800, "center"),
+      createDefaultLayer("type", "type", "Type badge", 492, 1112, 416, 56, 22, 800, "center"),
+      createDefaultLayer("code", "code", "Ticket code", 492, 1198, 416, 28, 18, 700, "center"),
+      createDefaultLayer("qr", "qr", "QR code", 1098, 1070, 188, 188, 20, 700, "center", 24),
+      createDefaultLayer("logo", "logo", "Logo", 1100, 112, 120, 120, 20, 700, "center", 24),
+      createDefaultLayer("footer", "footer", "Footer", 218, 1282, 964, 38, 20, 700, "center"),
     ];
   }
 
@@ -236,6 +362,23 @@ function createDefaultBuilderLayers(canvasPresetId = "ticket-landscape") {
     ];
   }
 
+  if (canvas.id === "story-portrait") {
+    return [
+      createDefaultLayer("badge", "badge", "Eyebrow", 110, 110, 240, 52, 22, 800),
+      createDefaultLayer("title", "title", "Title", 110, 300, 860, 300, 94, 800),
+      createDefaultLayer("accent", "accent", "Accent line", 110, 640, 220, 10, 10, 700, "left", 999),
+      createDefaultLayer("schedule", "info", "Schedule", 110, 760, 420, 180, 40, 700),
+      createDefaultLayer("venue", "info", "Venue", 110, 980, 420, 180, 40, 700),
+      createDefaultLayer("divider", "divider", "Divider", 110, 1188, 860, 2, 2, 700, "left", 999),
+      createDefaultLayer("guest", "guest", "Guest block", 110, 1246, 504, 210, 62, 800),
+      createDefaultLayer("type", "type", "Type badge", 110, 1526, 330, 62, 22, 800),
+      createDefaultLayer("code", "code", "Ticket code", 110, 1628, 360, 30, 18, 700),
+      createDefaultLayer("qr", "qr", "QR code", 744, 1260, 226, 226, 20, 700, "center", 28),
+      createDefaultLayer("logo", "logo", "Logo", 782, 112, 160, 160, 20, 700, "center", 28),
+      createDefaultLayer("footer", "footer", "Footer", 110, 1836, 860, 36, 20, 700),
+    ];
+  }
+
   return [
     createDefaultLayer("badge", "badge", "Eyebrow", 42, 34, 110, 36, 16, 800),
     createDefaultLayer("title", "title", "Title", 42, 98, 446, 78, 42, 800),
@@ -252,8 +395,8 @@ function createDefaultBuilderLayers(canvasPresetId = "ticket-landscape") {
   ];
 }
 
-function normalizeBuilderLayers(layers, canvasPresetId = "ticket-landscape") {
-  const canvas = getBuilderCanvasPreset(canvasPresetId);
+function normalizeBuilderLayers(layers, canvasPresetId = "ticket-landscape", canvasSize = null) {
+  const canvas = getBuilderCanvasPreset(canvasPresetId, canvasSize);
   const defaults = createDefaultBuilderLayers(canvasPresetId);
   const incomingLayers = Array.isArray(layers) ? layers : [];
   const defaultByBinding = new Map(defaults.map((layer) => [getBuilderLayerBindingId(layer), layer]));
@@ -309,10 +452,32 @@ function normalizeBuilderLayers(layers, canvasPresetId = "ticket-landscape") {
         0,
         24,
       ),
+      surfaceFillEnabled:
+        typeof candidate.surfaceFillEnabled === "boolean"
+          ? candidate.surfaceFillEnabled
+          : typeof baseLayer.surfaceFillEnabled === "boolean"
+            ? baseLayer.surfaceFillEnabled
+            : supportsSurfaceFill(candidate.kind || baseLayer.kind, bindingId),
+      surfaceStrokeEnabled:
+        typeof candidate.surfaceStrokeEnabled === "boolean"
+          ? candidate.surfaceStrokeEnabled
+          : typeof baseLayer.surfaceStrokeEnabled === "boolean"
+            ? baseLayer.surfaceStrokeEnabled
+            : supportsSurfaceStroke(candidate.kind || baseLayer.kind),
       backgroundImageUrl:
         typeof candidate.backgroundImageUrl === "string" && candidate.backgroundImageUrl.trim()
           ? candidate.backgroundImageUrl
           : baseLayer.backgroundImageUrl || null,
+      backgroundImageEnabled:
+        typeof candidate.backgroundImageEnabled === "boolean"
+          ? candidate.backgroundImageEnabled
+          : typeof baseLayer.backgroundImageEnabled === "boolean"
+            ? baseLayer.backgroundImageEnabled
+            : Boolean(
+                (typeof candidate.backgroundImageUrl === "string" && candidate.backgroundImageUrl.trim()) ||
+                  baseLayer.backgroundImageUrl,
+              ),
+      backgroundImageFit: resolveBuilderImageFit(candidate.backgroundImageFit || baseLayer.backgroundImageFit),
       rotation:
         typeof candidate.rotation === "number" && Number.isFinite(candidate.rotation)
           ? candidate.rotation
@@ -379,6 +544,21 @@ function applyLayerTransform(layer, markup) {
   return `<g transform="rotate(${rotation} ${centerX} ${centerY})">${markup}</g>`;
 }
 
+function buildGenericLayerImageMarkup(layer) {
+  if (!layer.backgroundImageUrl || layer.backgroundImageEnabled === false) {
+    return "";
+  }
+
+  const safeLayerBackgroundImageUrl = layer.backgroundImageUrl.replaceAll("&", "&amp;");
+  const clipId = `layer-clip-${String(layer.id).replace(/[^a-z0-9_-]+/gi, "-")}`;
+  return `
+    <clipPath id="${clipId}">
+      <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" />
+    </clipPath>
+    <image href="${safeLayerBackgroundImageUrl}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${resolveSvgPreserveAspectRatio(layer.backgroundImageFit || "cover")}" clip-path="url(#${clipId})" opacity="${layer.opacity}" />
+  `;
+}
+
 function buildPatternMarkup(pattern, width, height, accentColor) {
   if (pattern === "confetti") {
     const circles = [
@@ -417,13 +597,30 @@ function buildPatternMarkup(pattern, width, height, accentColor) {
 }
 
 function buildTicketExportSvg(design) {
-  const canvas = getBuilderCanvasPreset(design.canvasPresetId || "ticket-landscape");
+  const canvas = getBuilderCanvasPreset(design.canvasPresetId || "ticket-landscape", design.canvasSize || null);
   const safeLogoDataUrl = design.logoDataUrl ? design.logoDataUrl.replaceAll("&", "&amp;") : null;
   const safeQrDataUrl = design.qrDataUrl ? design.qrDataUrl.replaceAll("&", "&amp;") : null;
-  const safeBackgroundImageUrl = design.backgroundImageUrl ? design.backgroundImageUrl.replaceAll("&", "&amp;") : null;
-  const patternMarkup = buildPatternMarkup(design.pattern, canvas.width, canvas.height, design.accentColor);
-  const gradientId = design.backgroundGradient ? "ticket-background-gradient" : null;
-  const normalizedLayers = normalizeBuilderLayers(design.layers, design.canvasPresetId || "ticket-landscape");
+  const safeBackgroundImageUrl =
+    design.backgroundImageEnabled === false || !design.backgroundImageUrl
+      ? null
+      : design.backgroundImageUrl.replaceAll("&", "&amp;");
+  const patternMarkup =
+    design.backgroundPatternEnabled === false || design.pattern === "none"
+      ? ""
+      : buildPatternMarkup(design.pattern, canvas.width, canvas.height, design.accentColor);
+  const activeBackgroundGradient =
+    design.backgroundGradientEnabled === false ||
+    !design.backgroundGradient ||
+    !trimOrNull(design.backgroundGradient.from) ||
+    !trimOrNull(design.backgroundGradient.to)
+      ? null
+      : design.backgroundGradient;
+  const gradientId = activeBackgroundGradient ? "ticket-background-gradient" : null;
+  const normalizedLayers = normalizeBuilderLayers(
+    design.layers,
+    design.canvasPresetId || "ticket-landscape",
+    design.canvasSize || null,
+  );
   const qrModulesMarkup = QR_MODULES.map(([x, y]) => `<rect x="${x}" y="${y}" width="4" height="4" rx="0.5" fill="${design.qrColor}" />`).join("");
 
   const renderedLayers = normalizedLayers.map((layer) => {
@@ -443,14 +640,25 @@ function buildTicketExportSvg(design) {
         <clipPath id="${clipId}">
           <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" />
         </clipPath>
-        <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}" opacity="${layer.opacity}" />
+        <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="${layer.surfaceFillEnabled === false ? "transparent" : fillColor}" stroke="${layer.surfaceStrokeEnabled === false ? "transparent" : strokeColor}" stroke-width="${layer.surfaceStrokeEnabled === false ? 0 : strokeWidth}" opacity="${layer.opacity}" />
         ${
-          layerBackgroundImageUrl
-            ? `<image href="${layerBackgroundImageUrl}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" opacity="${layer.opacity}" />
-               <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}" opacity="${layer.opacity}" />`
+          layerBackgroundImageUrl && layer.backgroundImageEnabled !== false
+            ? `<image href="${layerBackgroundImageUrl}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${resolveSvgPreserveAspectRatio(layer.backgroundImageFit || "cover")}" clip-path="url(#${clipId})" opacity="${layer.opacity}" />
+               <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="none" stroke="${layer.surfaceStrokeEnabled === false ? "transparent" : strokeColor}" stroke-width="${layer.surfaceStrokeEnabled === false ? 0 : strokeWidth}" opacity="${layer.opacity}" />`
             : ""
         }
       `);
+    }
+
+    if (layer.kind === "custom-text") {
+      const lines = wrapText(layer.customText || layer.label || "Text block", layer.fontSize, layer.width, 4);
+      return applyLayerTransform(
+        layer,
+        `
+          ${buildGenericLayerImageMarkup(layer)}
+          ${renderTextBlockLines(layer, lines, layer.fillColor || design.textColor, Math.round(layer.fontSize * 1.12))}
+        `,
+      );
     }
 
     if (layer.kind === "custom-text") {
@@ -464,9 +672,10 @@ function buildTicketExportSvg(design) {
     if (layer.kind === "badge") {
       const badgeFill = layer.fillColor || design.accentColor;
       const badgeTextColor = layer.strokeColor || design.backgroundColor;
-      const label = canvas.category === "flyer" ? "INVITE" : "TICKET";
+      const label = ["invitation", "flyer", "story"].includes(canvas.category) ? "INVITE" : "TICKET";
       return applyLayerTransform(layer, `
-        <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="${badgeFill}" opacity="${layer.opacity}" />
+        ${buildGenericLayerImageMarkup(layer)}
+        <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="${layer.surfaceFillEnabled === false ? "transparent" : badgeFill}" opacity="${layer.opacity}" />
         <text x="${layer.x + layer.width / 2}" y="${layer.y + layer.height / 2 + layer.fontSize * 0.34}" text-anchor="middle" fill="${badgeTextColor}" font-family="${escapeSvgText(
           layer.fontFamily || "Nunito, Arial, sans-serif",
         )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}">${escapeSvgText(label)}</text>
@@ -474,7 +683,20 @@ function buildTicketExportSvg(design) {
     }
 
     if (layer.kind === "title") {
-      const lines = wrapText(design.title, layer.fontSize, layer.width, canvas.id === "flyer-portrait" ? 4 : 3);
+      const titleLineCap = ["invitation", "flyer", "story"].includes(canvas.category) ? 4 : 3;
+      const lines = wrapText(design.title, layer.fontSize, layer.width, titleLineCap);
+      return applyLayerTransform(
+        layer,
+        `
+          ${buildGenericLayerImageMarkup(layer)}
+          ${renderTextBlockLines(layer, lines, layer.fillColor || design.textColor, Math.round(layer.fontSize * 1.08))}
+        `,
+      );
+    }
+
+    if (layer.kind === "title") {
+      const titleLineCap = ["invitation", "flyer", "story"].includes(canvas.category) ? 4 : 3;
+      const lines = wrapText(design.title, layer.fontSize, layer.width, titleLineCap);
       return applyLayerTransform(
         layer,
         renderTextBlockLines(layer, lines, layer.fillColor || design.textColor, Math.round(layer.fontSize * 1.08)),
@@ -482,7 +704,42 @@ function buildTicketExportSvg(design) {
     }
 
     if (layer.kind === "accent") {
-      return applyLayerTransform(layer, `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${Math.max(4, layer.height)}" rx="${layer.radius}" fill="${layer.fillColor || design.accentColor}" opacity="${layer.opacity}" />`);
+      return applyLayerTransform(layer, `
+        ${buildGenericLayerImageMarkup(layer)}
+        <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${Math.max(4, layer.height)}" rx="${layer.radius}" fill="${layer.surfaceFillEnabled === false ? "transparent" : layer.fillColor || design.accentColor}" opacity="${layer.opacity}" />
+      `);
+    }
+
+    if (layer.kind === "info" && bindingId === "schedule") {
+      return applyLayerTransform(layer, `
+        ${buildGenericLayerImageMarkup(layer)}
+        ${renderLabelAndValue(layer, "DATE & TIME", `${design.date} â€¢ ${design.time}`, design.textColor, design.subTextColor)}
+      `);
+    }
+
+    if (layer.kind === "info" && bindingId === "venue") {
+      return applyLayerTransform(layer, `
+        ${buildGenericLayerImageMarkup(layer)}
+        ${renderLabelAndValue(layer, "VENUE", design.location, design.textColor, design.subTextColor)}
+      `);
+    }
+
+    if (bindingId === "guest") {
+      return applyLayerTransform(layer, `
+        ${buildGenericLayerImageMarkup(layer)}
+        ${renderLabelAndValue(layer, "GUEST", design.guest, design.textColor, design.subTextColor)}
+      `);
+    }
+
+    if (bindingId === "code") {
+      const anchor = getTextAnchor(layer.align);
+      const anchorX = getAnchorX(layer);
+      return applyLayerTransform(layer, `
+        ${buildGenericLayerImageMarkup(layer)}
+        <text x="${anchorX}" y="${layer.y + layer.fontSize}" text-anchor="${anchor}" fill="${layer.fillColor || design.subTextColor}" font-family="${escapeSvgText(
+          layer.fontFamily || "'Roboto Mono', monospace",
+        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" opacity="${layer.opacity}">${escapeSvgText(design.ticketCode || "TKT-SAMPLE-0001")}</text>
+      `);
     }
 
     if (layer.kind === "info" && bindingId === "schedule") {
@@ -498,7 +755,7 @@ function buildTicketExportSvg(design) {
       return applyLayerTransform(layer, `<line x1="${layer.x}" y1="${y}" x2="${layer.x + layer.width}" y2="${y}" stroke="${layer.strokeColor || design.textColor}" stroke-width="${Math.max(1.5, layer.height)}" stroke-dasharray="10 8" opacity="${Math.min(layer.opacity, 0.44)}" />`);
     }
 
-    if (layer.kind === "guest") {
+    if (bindingId === "guest") {
       return applyLayerTransform(layer, renderLabelAndValue(layer, "GUEST", design.guest, design.textColor, design.subTextColor));
     }
 
@@ -506,14 +763,15 @@ function buildTicketExportSvg(design) {
       const typeFill = layer.fillColor || design.accentColor;
       const typeTextColor = layer.strokeColor || design.backgroundColor;
       return applyLayerTransform(layer, `
-        <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="${typeFill}" opacity="${layer.opacity}" />
+        ${buildGenericLayerImageMarkup(layer)}
+        <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="${layer.surfaceFillEnabled === false ? "transparent" : typeFill}" opacity="${layer.opacity}" />
         <text x="${layer.x + layer.width / 2}" y="${layer.y + layer.height / 2 + layer.fontSize * 0.34}" text-anchor="middle" fill="${typeTextColor}" font-family="${escapeSvgText(
           layer.fontFamily || "Nunito, Arial, sans-serif",
         )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}">${escapeSvgText(String(design.type || "").toUpperCase())}</text>
       `);
     }
 
-    if (layer.kind === "code") {
+    if (bindingId === "code") {
       const anchor = getTextAnchor(layer.align);
       const anchorX = getAnchorX(layer);
       return applyLayerTransform(layer, `<text x="${anchorX}" y="${layer.y + layer.fontSize}" text-anchor="${anchor}" fill="${layer.fillColor || design.subTextColor}" font-family="${escapeSvgText(
@@ -539,20 +797,42 @@ function buildTicketExportSvg(design) {
            </g>`;
 
       return applyLayerTransform(layer, `
-        <rect x="${panelX}" y="${panelY}" width="${qrSize}" height="${qrSize}" rx="${panelRadius}" fill="${design.qrPanelColor}" opacity="${layer.opacity}" />
+        <rect x="${panelX}" y="${panelY}" width="${qrSize}" height="${qrSize}" rx="${panelRadius}" fill="${layer.surfaceFillEnabled === false ? "transparent" : design.qrPanelColor}" opacity="${layer.opacity}" />
         ${qrMarkup}
       `);
     }
 
     if (layer.kind === "logo") {
-      const resolvedLogoUrl = layer.backgroundImageUrl ? layer.backgroundImageUrl.replaceAll("&", "&amp;") : safeLogoDataUrl;
+      const resolvedLogoUrl =
+        layer.backgroundImageEnabled === false
+          ? safeLogoDataUrl
+          : layer.backgroundImageUrl
+            ? layer.backgroundImageUrl.replaceAll("&", "&amp;")
+            : safeLogoDataUrl;
       if (!resolvedLogoUrl) {
         return "";
       }
 
       return applyLayerTransform(layer, `
-        <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="rgba(255,255,255,0.94)" opacity="${layer.opacity}" />
-        <image href="${resolvedLogoUrl}" x="${layer.x + layer.width * 0.16}" y="${layer.y + layer.height * 0.16}" width="${layer.width * 0.68}" height="${layer.height * 0.68}" preserveAspectRatio="xMidYMid slice" />
+        <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="${layer.surfaceFillEnabled === false ? "transparent" : "rgba(255,255,255,0.94)"}" opacity="${layer.opacity}" />
+        <image href="${resolvedLogoUrl}" x="${layer.x + layer.width * 0.08}" y="${layer.y + layer.height * 0.08}" width="${layer.width * 0.84}" height="${layer.height * 0.84}" preserveAspectRatio="${resolveSvgPreserveAspectRatio(layer.backgroundImageFit || "contain")}" />
+      `);
+    }
+
+    if (layer.kind === "footer") {
+      const anchor = getTextAnchor(layer.align);
+      const anchorX = getAnchorX(layer);
+      const lines = wrapText(design.footerLabel, layer.fontSize, layer.width, 2);
+      const safeLines = lines.map((line) => escapeSvgText(line));
+      const lineHeight = Math.round(layer.fontSize * 1.1);
+      const tspanMarkup = safeLines
+        .map((line, index) => `<tspan x="${anchorX}" dy="${index === 0 ? 0 : lineHeight}">${line}</tspan>`)
+        .join("");
+      return applyLayerTransform(layer, `
+        ${buildGenericLayerImageMarkup(layer)}
+        <text x="${anchorX}" y="${layer.y + layer.fontSize}" text-anchor="${anchor}" fill="${layer.fillColor || design.subTextColor}" font-family="${escapeSvgText(
+          layer.fontFamily || "Nunito, Arial, sans-serif",
+        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" opacity="${layer.opacity}">${tspanMarkup}</text>
       `);
     }
 
@@ -580,24 +860,20 @@ function buildTicketExportSvg(design) {
           <rect x="0" y="0" width="${canvas.width}" height="${canvas.height}" rx="${canvas.category === "flyer" ? 36 : 28}" />
         </clipPath>
         ${
-          design.backgroundGradient
+          activeBackgroundGradient
             ? `<linearGradient id="${gradientId}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${canvas.width}" y2="${canvas.height}">
-                 <stop offset="0%" stop-color="${design.backgroundGradient.from}" />
-                 <stop offset="100%" stop-color="${design.backgroundGradient.to}" />
+                 <stop offset="0%" stop-color="${activeBackgroundGradient.from}" />
+                 <stop offset="100%" stop-color="${activeBackgroundGradient.to}" />
                </linearGradient>`
             : ""
         }
       </defs>
       <g clip-path="url(#ticket-clip)">
-        <rect width="${canvas.width}" height="${canvas.height}" fill="${design.backgroundColor}" />
-        ${
-          design.backgroundGradient
-            ? `<rect width="${canvas.width}" height="${canvas.height}" fill="url(#${gradientId})" />`
-            : ""
-        }
+        ${design.backgroundEnabled === false ? "" : `<rect width="${canvas.width}" height="${canvas.height}" fill="${design.backgroundColor}" />`}
+        ${activeBackgroundGradient ? `<rect width="${canvas.width}" height="${canvas.height}" fill="url(#${gradientId})" />` : ""}
         ${
           safeBackgroundImageUrl
-            ? `<image href="${safeBackgroundImageUrl}" x="0" y="0" width="${canvas.width}" height="${canvas.height}" preserveAspectRatio="xMidYMid slice" />`
+            ? `<image href="${safeBackgroundImageUrl}" x="0" y="0" width="${canvas.width}" height="${canvas.height}" preserveAspectRatio="${resolveSvgPreserveAspectRatio(design.backgroundImageFit || "cover")}" />`
             : ""
         }
         ${patternMarkup}
@@ -607,14 +883,33 @@ function buildTicketExportSvg(design) {
   `.trim();
 }
 
-function buildArchivedBuilderTicketSvg({ builderConfig, liveContent }) {
+function resolveArchivedBuilderField({
+  archivedContent,
+  globalContent,
+  recipientContent,
+  globalKey,
+  recipientKey,
+  archivedKey,
+  fallback,
+}) {
+  if (globalKey) {
+    return trimOrNull(globalContent && globalContent[globalKey]) || trimOrNull(archivedContent[archivedKey]) || fallback;
+  }
+
+  return trimOrNull(recipientContent && recipientContent[recipientKey]) || fallback;
+}
+
+function buildArchivedBuilderTicketSvg({ builderConfig, liveContent, globalContent, recipientContent }) {
   const design = builderConfig && builderConfig.design ? builderConfig.design : {};
   const archivedContent = builderConfig && builderConfig.content ? builderConfig.content : {};
   const textColor = trimOrNull(design.textColor) || "#FFFFFF";
   const { qrColor, qrPanelColor } = resolveQrPalette(textColor);
+  const resolvedGlobalContent = globalContent || liveContent || {};
+  const resolvedRecipientContent = recipientContent || liveContent || {};
 
   return buildTicketExportSvg({
     backgroundColor: trimOrNull(design.backgroundColor) || "#08131D",
+    backgroundEnabled: design.backgroundEnabled !== false,
     backgroundGradient:
       trimOrNull(design.backgroundGradient && design.backgroundGradient.from) &&
       trimOrNull(design.backgroundGradient && design.backgroundGradient.to)
@@ -624,24 +919,29 @@ function buildArchivedBuilderTicketSvg({ builderConfig, liveContent }) {
             angle: design.backgroundGradient.angle,
           }
         : null,
+    backgroundGradientEnabled: design.backgroundGradientEnabled !== false,
     backgroundImageUrl: trimOrNull(design.backgroundImageUrl),
+    backgroundImageEnabled: design.backgroundImageEnabled !== false,
+    backgroundImageFit: resolveBuilderImageFit(design.backgroundImageFit),
     accentColor: trimOrNull(design.accentColor) || "#39C98B",
     textColor,
     subTextColor: trimOrNull(design.subTextColor) || "rgba(255,255,255,0.68)",
-    title: trimOrNull(liveContent.title) || trimOrNull(archivedContent.title) || "Event ticket",
-    date: trimOrNull(liveContent.date) || trimOrNull(archivedContent.date) || "Date TBD",
-    time: trimOrNull(liveContent.time) || trimOrNull(archivedContent.time) || "Time TBD",
-    location: trimOrNull(liveContent.location) || trimOrNull(archivedContent.location) || "Location TBD",
-    guest: trimOrNull(liveContent.guest) || trimOrNull(archivedContent.guest) || "Guest",
-    type: trimOrNull(liveContent.type) || trimOrNull(archivedContent.type) || "Standard",
-    footerLabel: trimOrNull(liveContent.footerLabel) || trimOrNull(archivedContent.footerLabel) || "Event Ticket",
+    title: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "title", archivedKey: "title", fallback: "Event ticket" }),
+    date: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "date", archivedKey: "date", fallback: "Date TBD" }),
+    time: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "time", archivedKey: "time", fallback: "Time TBD" }),
+    location: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "location", archivedKey: "location", fallback: "Location TBD" }),
+    guest: resolveArchivedBuilderField({ archivedContent, recipientContent: resolvedRecipientContent, recipientKey: "guest", archivedKey: "guest", fallback: "Guest" }),
+    type: resolveArchivedBuilderField({ archivedContent, recipientContent: resolvedRecipientContent, recipientKey: "type", archivedKey: "type", fallback: "Standard" }),
+    footerLabel: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "footerLabel", archivedKey: "footerLabel", fallback: "Event Ticket" }),
     pattern: trimOrNull(design.pattern) || "none",
+    backgroundPatternEnabled: design.backgroundPatternEnabled !== false,
     logoDataUrl: trimOrNull(design.logoDataUrl),
     qrColor,
     qrPanelColor,
-    ticketCode: trimOrNull(liveContent.ticketCode) || trimOrNull(archivedContent.ticketCode) || "TKT-SAMPLE-0001",
-    qrDataUrl: trimOrNull(liveContent.qrDataUrl),
+    ticketCode: resolveArchivedBuilderField({ archivedContent, recipientContent: resolvedRecipientContent, recipientKey: "ticketCode", archivedKey: "ticketCode", fallback: "TKT-SAMPLE-0001" }),
+    qrDataUrl: trimOrNull(resolvedRecipientContent.qrDataUrl),
     canvasPresetId: design.canvasPresetId || "ticket-landscape",
+    canvasSize: normalizeBuilderCanvasSize(design.canvasSize),
     layers: Array.isArray(design.layers) ? design.layers : undefined,
   });
 }

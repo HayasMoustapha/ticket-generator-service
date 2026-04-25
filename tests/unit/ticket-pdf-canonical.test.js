@@ -25,6 +25,7 @@ jest.mock('../../src/core/templates/html-template.service', () => ({
 const htmlTemplateService = require('../../src/core/templates/html-template.service');
 const canonicalTicketGenerationService = require('../../src/services/ticket-generation.service');
 const pdfService = require('../../src/core/pdf/pdf.service');
+const { buildArchivedBuilderTicketSvg } = require('../../src/core/templates/builder-pdf-renderer');
 
 describe('ticket PDF canonical rendering', () => {
   let tempDir;
@@ -198,5 +199,75 @@ describe('ticket PDF canonical rendering', () => {
     );
 
     artifactSpy.mockRestore();
+  });
+
+  it('supports scoped placeholders while keeping recipient data out of archived builder fallbacks', () => {
+    const svg = buildArchivedBuilderTicketSvg({
+      builderConfig: {
+        design: {
+          backgroundColor: '#08131D',
+          accentColor: '#39C98B',
+          textColor: '#FFFFFF',
+          subTextColor: 'rgba(255,255,255,0.68)',
+          pattern: 'none',
+          canvasPresetId: 'ticket-landscape',
+        },
+        content: {
+          title: 'Archived Global Title',
+          guest: 'Archived Sample Guest',
+          ticketCode: 'ARCHIVED-CODE-999',
+          type: 'Archived Sample Type',
+          footerLabel: 'Archived Footer',
+        },
+      },
+      globalContent: {
+        title: 'Live Global Title',
+        date: '2026-10-01',
+        time: '19:30',
+        location: 'Douala',
+        footerLabel: 'Live Footer',
+      },
+      recipientContent: {
+        guest: '',
+        type: '',
+        ticketCode: '',
+        qrDataUrl: null,
+      },
+    });
+
+    expect(svg).toContain('Live Global Title');
+    expect(svg).toContain('Live Footer');
+    expect(svg).toContain('>Guest<');
+    expect(svg).toContain('>STANDARD<');
+    expect(svg).toContain('TKT-SAMPLE-0001');
+    expect(svg).not.toContain('Archived Sample Guest');
+    expect(svg).not.toContain('ARCHIVED-CODE-999');
+    expect(svg).not.toContain('Archived Sample Type');
+  });
+
+  it('replaces scoped template placeholders for global and recipient fields', () => {
+    const html = canonicalTicketGenerationService.replaceTemplateVariables(
+      '<div>{{GLOBAL.EVENT_TITLE}} / {{RECIPIENT.GUEST_NAME}} / <img src="{{RECIPIENT.QR_CODE}}" /></div>',
+      {
+        EVENT_TITLE: 'Legacy Flat Title',
+        GUEST_NAME: 'Legacy Flat Guest',
+        QR_CODE: 'data:image/png;base64,flat',
+      },
+      {
+        GLOBAL: {
+          EVENT_TITLE: 'Scoped Event Title',
+        },
+        RECIPIENT: {
+          GUEST_NAME: 'Scoped Guest Name',
+          QR_CODE: 'data:image/png;base64,scoped',
+        },
+      },
+    );
+
+    expect(html).toContain('Scoped Event Title');
+    expect(html).toContain('Scoped Guest Name');
+    expect(html).toContain('src="data:image/png;base64,scoped"');
+    expect(html).not.toContain('{{GLOBAL.EVENT_TITLE}}');
+    expect(html).not.toContain('{{RECIPIENT.GUEST_NAME}}');
   });
 });

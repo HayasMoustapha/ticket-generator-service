@@ -244,7 +244,7 @@ class TicketGenerationService {
     const qrCodeDataUrl = typeof QRCode.toDataURL === 'function'
       ? await QRCode.toDataURL(qrPayload)
       : `data:image/png;base64,${(await QRCode.toBuffer(qrPayload, { margin: 1, width: 300 })).toString('base64')}`;
-    const variables = this.buildTemplateVariables({
+    const renderContext = this.buildRenderContext({
       ticketData,
       mappedTicket,
       mappedEvent,
@@ -271,11 +271,8 @@ class TicketGenerationService {
           if (builderConfig) {
             const renderedSvg = this.buildArchivedBuilderLiveSvg({
               builderConfig,
-              mappedTicket,
-              mappedEvent,
-              guestDisplayName: variables.GUEST_DISPLAY_NAME || variables.GUEST_NAME,
-              qrCodeDataUrl,
-              footerLabel: variables.FOOTER_LABEL
+              globalContent: renderContext.builderContent.global,
+              recipientContent: renderContext.builderContent.recipient,
             });
             return {
               pdfBuffer: await htmlTemplateService.renderSvgToPdf(renderedSvg),
@@ -285,7 +282,11 @@ class TicketGenerationService {
           }
 
           if (templateSvg) {
-            const renderedSvg = this.replaceTemplateVariables(templateSvg, variables);
+            const renderedSvg = this.replaceTemplateVariables(
+              templateSvg,
+              renderContext.flatVariables,
+              renderContext.scopedVariables,
+            );
             return {
               pdfBuffer: await htmlTemplateService.renderSvgToPdf(renderedSvg),
               renderMode: 'template-svg',
@@ -309,7 +310,11 @@ class TicketGenerationService {
             }
           }
 
-          const renderedHtml = this.replaceTemplateVariables(html, variables);
+          const renderedHtml = this.replaceTemplateVariables(
+            html,
+            renderContext.flatVariables,
+            renderContext.scopedVariables,
+          );
           return {
             pdfBuffer: await htmlTemplateService.renderTemplateToPdf(renderedHtml, { width, height }),
             renderMode: 'template-html',
@@ -324,7 +329,11 @@ class TicketGenerationService {
     }
 
     try {
-      const builderDefaultSvg = this.replaceTemplateVariables(this.buildDefaultBuilderTemplate(), variables);
+      const builderDefaultSvg = this.replaceTemplateVariables(
+        this.buildDefaultBuilderTemplate(),
+        renderContext.flatVariables,
+        renderContext.scopedVariables,
+      );
       return {
         pdfBuffer: await htmlTemplateService.renderSvgToPdf(builderDefaultSvg),
         renderMode: 'default-builder',
@@ -381,25 +390,13 @@ class TicketGenerationService {
 
   buildArchivedBuilderLiveSvg({
     builderConfig,
-    mappedTicket,
-    mappedEvent,
-    guestDisplayName,
-    qrCodeDataUrl,
-    footerLabel
+    globalContent,
+    recipientContent,
   }) {
     return buildArchivedBuilderTicketSvg({
       builderConfig,
-      liveContent: {
-        title: mappedEvent.title || 'Event ticket',
-        date: this.formatBuilderDate(mappedEvent.event_date),
-        time: this.formatBuilderTime(mappedEvent.event_date),
-        location: mappedEvent.location || 'Location TBD',
-        guest: guestDisplayName || 'Guest',
-        type: mappedTicket.type || 'Standard',
-        footerLabel: footerLabel || 'Event Ticket',
-        ticketCode: mappedTicket.code || String(mappedTicket.id || ''),
-        qrDataUrl: qrCodeDataUrl || null
-      }
+      globalContent,
+      recipientContent,
     });
   }
 
@@ -429,7 +426,7 @@ class TicketGenerationService {
     return date.toISOString().split('T')[1]?.slice(0, 5) || 'Time TBD';
   }
 
-  buildTemplateVariables({ ticketData, mappedTicket, mappedEvent, mappedUser, qrCodePath, qrCodeDataUrl }) {
+  buildRenderContext({ ticketData, mappedTicket, mappedEvent, mappedUser, qrCodePath, qrCodeDataUrl }) {
     const eventDate = mappedEvent.event_date ? new Date(mappedEvent.event_date) : null;
     const eventDateLabel = eventDate ? eventDate.toISOString().split('T')[0] : '';
     const eventTimeLabel = eventDate ? eventDate.toISOString().split('T')[1]?.slice(0, 5) : '';
@@ -461,64 +458,105 @@ class TicketGenerationService {
     const organizerName = mappedEvent.organizer_name || ticketData.event?.organizer_name || '';
     const qrCodeUrl = qrCodeDataUrl || (qrCodePath ? `file://${qrCodePath}` : '');
 
+    const scopedVariables = {
+      GLOBAL: {
+        EVENT_TITLE: mappedEvent.title || '',
+        EVENT_TITLE_UPPER: (mappedEvent.title || '').toUpperCase(),
+        EVENT_DATE: eventDateLabel,
+        EVENT_DATE_LONG: eventDateLong,
+        EVENT_TIME: eventTimeLabel,
+        EVENT_TIME_LABEL: eventTimeRichLabel,
+        EVENT_LOCATION: mappedEvent.location || '',
+        EVENT_DESCRIPTION: mappedEvent.description || '',
+        EVENT_CATEGORY: mappedEvent.category || '',
+        ORGANIZER_NAME: organizerName,
+        ORGANIZER_LABEL: organizerName ? `Hosted by ${organizerName}` : '',
+        FOOTER_LABEL: organizerName ? `Hosted by ${organizerName}` : 'Event Ticket',
+      },
+      RECIPIENT: {
+        EVENT_TYPE: ticketData.ticket_type?.name || mappedTicket.type || '',
+        GUEST_NAME: guestDisplayName,
+        GUEST_DISPLAY_NAME: guestDisplayName,
+        GUEST_FIRST_NAME: guestFirstName,
+        GUEST_LAST_NAME: guestLastName,
+        GUEST_EMAIL: mappedUser.email || '',
+        GUEST_PHONE: mappedUser.phone || '',
+        GUEST_INITIALS: guestInitials,
+        TICKET_CODE: ticketData.ticket_code || String(mappedTicket.id || ''),
+        TICKET_ID: String(mappedTicket.id || ''),
+        TICKET_TYPE: ticketData.ticket_type?.name || mappedTicket.type || '',
+        INVITATION_CODE: invitationCode,
+        EVENT_GUEST_STATUS: ticketData.event_guest?.status || '',
+        CHECK_IN_STATUS: ticketData.event_guest?.is_present ? 'Checked in' : 'Awaiting check-in',
+        QR_CODE: qrCodeUrl,
+        ISSUED_AT: issuedAt,
+        ISSUED_DATE: Number.isNaN(issuedDate.getTime()) ? '' : issuedDate.toISOString().split('T')[0],
+        ISSUED_TIME: Number.isNaN(issuedDate.getTime()) ? '' : issuedDate.toISOString().split('T')[1]?.slice(0, 5),
+      }
+    };
+
+    const flatVariables = {
+      ...scopedVariables.GLOBAL,
+      ...scopedVariables.RECIPIENT,
+    };
+
     return {
-      EVENT_TITLE: mappedEvent.title || '',
-      EVENT_TITLE_UPPER: (mappedEvent.title || '').toUpperCase(),
-      EVENT_TYPE: ticketData.ticket_type?.name || mappedTicket.type || '',
-      EVENT_DATE: eventDateLabel,
-      EVENT_DATE_LONG: eventDateLong,
-      EVENT_TIME: eventTimeLabel,
-      EVENT_TIME_LABEL: eventTimeRichLabel,
-      EVENT_LOCATION: mappedEvent.location || '',
-      EVENT_DESCRIPTION: mappedEvent.description || '',
-      EVENT_CATEGORY: mappedEvent.category || '',
-      GUEST_NAME: guestDisplayName,
-      GUEST_DISPLAY_NAME: guestDisplayName,
-      GUEST_FIRST_NAME: guestFirstName,
-      GUEST_LAST_NAME: guestLastName,
-      GUEST_EMAIL: mappedUser.email || '',
-      GUEST_PHONE: mappedUser.phone || '',
-      GUEST_INITIALS: guestInitials,
-      TICKET_CODE: ticketData.ticket_code || String(mappedTicket.id || ''),
-      TICKET_ID: String(mappedTicket.id || ''),
-      TICKET_TYPE: ticketData.ticket_type?.name || mappedTicket.type || '',
-      INVITATION_CODE: invitationCode,
-      EVENT_GUEST_STATUS: ticketData.event_guest?.status || '',
-      CHECK_IN_STATUS: ticketData.event_guest?.is_present ? 'Checked in' : 'Awaiting check-in',
-      QR_CODE: qrCodeUrl,
-      ORGANIZER_NAME: organizerName,
-      ORGANIZER_LABEL: organizerName ? `Hosted by ${organizerName}` : '',
-      FOOTER_LABEL: organizerName ? `Hosted by ${organizerName}` : 'Event Ticket',
-      ISSUED_AT: issuedAt,
-      ISSUED_DATE: Number.isNaN(issuedDate.getTime()) ? '' : issuedDate.toISOString().split('T')[0],
-      ISSUED_TIME: Number.isNaN(issuedDate.getTime()) ? '' : issuedDate.toISOString().split('T')[1]?.slice(0, 5)
+      flatVariables,
+      scopedVariables,
+      builderContent: {
+        global: {
+          title: scopedVariables.GLOBAL.EVENT_TITLE || 'Event ticket',
+          date: this.formatBuilderDate(mappedEvent.event_date),
+          time: this.formatBuilderTime(mappedEvent.event_date),
+          location: scopedVariables.GLOBAL.EVENT_LOCATION || 'Location TBD',
+          footerLabel: scopedVariables.GLOBAL.FOOTER_LABEL || 'Event Ticket',
+        },
+        recipient: {
+          guest: scopedVariables.RECIPIENT.GUEST_DISPLAY_NAME || 'Guest',
+          type: scopedVariables.RECIPIENT.TICKET_TYPE || 'Standard',
+          ticketCode: scopedVariables.RECIPIENT.TICKET_CODE || String(mappedTicket.id || ''),
+          qrDataUrl: scopedVariables.RECIPIENT.QR_CODE || null,
+        }
+      }
     };
   }
 
-  replaceTemplateVariables(html, variables) {
+  buildTemplateVariables(args) {
+    return this.buildRenderContext(args).flatVariables;
+  }
+
+  replaceTemplateVariables(html, variables, scopedVariables = {}) {
     let output = html;
+    const recipientQrCode = scopedVariables.RECIPIENT?.QR_CODE || variables.QR_CODE || '';
 
     // Gérer le QR code de façon robuste:
     // - Si le template l'utilise déjà en src (ex: <img src="{{QR_CODE}}">), on injecte l'URL.
     // - Si utilisé dans du CSS (url(...)), on injecte l'URL.
     // - Sinon on remplace le placeholder par une balise <img> pour éviter un rendu texte brut.
-    if (variables.QR_CODE) {
-      const qrUrl = variables.QR_CODE;
-      const qrSrcRegex = /src=(["'])\s*\{\{\s*QR_CODE\s*\}\}\s*\1/g;
+    if (recipientQrCode) {
+      const qrUrl = recipientQrCode;
+      const qrSrcRegex = /src=(["'])\s*\{\{\s*(?:QR_CODE|RECIPIENT\.QR_CODE)\s*\}\}\s*\1/g;
       output = output.replace(qrSrcRegex, `src="${qrUrl}"`);
 
-      const qrHrefRegex = /href=(["'])\s*\{\{\s*QR_CODE\s*\}\}\s*\1/g;
+      const qrHrefRegex = /href=(["'])\s*\{\{\s*(?:QR_CODE|RECIPIENT\.QR_CODE)\s*\}\}\s*\1/g;
       output = output.replace(qrHrefRegex, `href="${qrUrl}"`);
 
-      const qrCssUrlRegex = /url\(\s*(["'])?\s*\{\{\s*QR_CODE\s*\}\}\s*(\1)?\s*\)/g;
+      const qrCssUrlRegex = /url\(\s*(["'])?\s*\{\{\s*(?:QR_CODE|RECIPIENT\.QR_CODE)\s*\}\}\s*(\1)?\s*\)/g;
       output = output.replace(qrCssUrlRegex, `url("${qrUrl}")`);
 
-      const qrTokenRegex = /\{\{\s*QR_CODE\s*\}\}/g;
+      const qrTokenRegex = /\{\{\s*(?:QR_CODE|RECIPIENT\.QR_CODE)\s*\}\}/g;
       output = output.replace(
         qrTokenRegex,
         `<img src="${qrUrl}" alt="QR Code" style="width:200px;height:200px;object-fit:contain;" />`
       );
     }
+
+    Object.entries(scopedVariables).forEach(([scopeKey, scopeValues]) => {
+      Object.entries(scopeValues || {}).forEach(([key, value]) => {
+        const scopedRegex = new RegExp(`\\{\\{\\s*${scopeKey}\\.${key}\\s*\\}\\}`, 'g');
+        output = output.replace(scopedRegex, value ?? '');
+      });
+    });
 
     Object.entries(variables).forEach(([key, value]) => {
       if (key === 'QR_CODE') return;

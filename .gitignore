@@ -33,3 +33,4 @@ build/
 # Temporary
 tmp/
 .temp/
+.codex-runtime/
