@@ -277,7 +277,7 @@ class TicketGenerationService {
             return {
               pdfBuffer: await htmlTemplateService.renderSvgToPdf(renderedSvg),
               renderMode: 'archived-builder-manifest',
-              renderEngine: 'chromium-svg-pdf'
+              renderEngine: 'chromium-svg-fallback-pdf'
             };
           }
 

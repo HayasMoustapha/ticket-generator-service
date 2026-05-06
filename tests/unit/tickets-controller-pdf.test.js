@@ -38,7 +38,7 @@ describe('tickets controller PDF responses', () => {
       pdfBase64: Buffer.from('pdf-buffer').toString('base64'),
       generatedAt: '2026-04-24T07:00:00.000Z',
       renderMode: 'archived-builder-manifest',
-      renderEngine: 'chromium-svg-pdf',
+      renderEngine: 'chromium-svg-fallback-pdf',
     });
 
     const req = {
@@ -69,7 +69,7 @@ describe('tickets controller PDF responses', () => {
           ticketId: '99',
           filename: 'ticket-99.pdf',
           renderMode: 'archived-builder-manifest',
-          renderEngine: 'chromium-svg-pdf',
+          renderEngine: 'chromium-svg-fallback-pdf',
         }),
       }),
     );
@@ -96,7 +96,7 @@ describe('tickets controller PDF responses', () => {
     ticketGenerationService.generatePDFArtifact.mockResolvedValue({
       pdfBuffer: Buffer.from('upstream-pdf'),
       renderMode: 'archived-builder-manifest',
-      renderEngine: 'chromium-svg-pdf',
+      renderEngine: 'chromium-svg-fallback-pdf',
     });
 
     const req = {
@@ -116,7 +116,7 @@ describe('tickets controller PDF responses', () => {
       }),
     );
     expect(res.setHeader).toHaveBeenCalledWith('x-event-planner-ticket-render-mode', 'archived-builder-manifest');
-    expect(res.setHeader).toHaveBeenCalledWith('x-event-planner-ticket-render-engine', 'chromium-svg-pdf');
+    expect(res.setHeader).toHaveBeenCalledWith('x-event-planner-ticket-render-engine', 'chromium-svg-fallback-pdf');
     expect(res.send).toHaveBeenCalledWith(Buffer.from('upstream-pdf'));
     expect(next).not.toHaveBeenCalled();
   });
@@ -141,7 +141,7 @@ describe('tickets controller PDF responses', () => {
     ticketGenerationService.generatePDFArtifact.mockResolvedValue({
       pdfBuffer: Buffer.from('upstream-json-pdf'),
       renderMode: 'archived-builder-manifest',
-      renderEngine: 'chromium-svg-pdf',
+      renderEngine: 'chromium-svg-fallback-pdf',
     });
 
     const req = {
@@ -163,7 +163,7 @@ describe('tickets controller PDF responses', () => {
           ticketCode: 'TKT-UPSTREAM-052',
           pdfBase64: Buffer.from('upstream-json-pdf').toString('base64'),
           renderMode: 'archived-builder-manifest',
-          renderEngine: 'chromium-svg-pdf',
+          renderEngine: 'chromium-svg-fallback-pdf',
         }),
       }),
     );

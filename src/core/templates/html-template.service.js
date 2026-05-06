@@ -88,7 +88,6 @@ class HtmlTemplateService {
     const dimensions = this.parseSvgDimensions(svgMarkup);
     const width = options.width || dimensions.width;
     const height = options.height || dimensions.height;
-    const encodedSvg = Buffer.from(svgMarkup, 'utf8').toString('base64');
 
     return this.renderTemplateToPdf(
       `<!doctype html>
@@ -104,16 +103,15 @@ class HtmlTemplateService {
               overflow: hidden;
               background: transparent;
             }
-            img {
+            body > svg {
               display: block;
               width: 100%;
               height: 100%;
-              object-fit: fill;
             }
           </style>
         </head>
         <body>
-          <img alt="Ticket" src="data:image/svg+xml;base64,${encodedSvg}" />
+          ${svgMarkup}
         </body>
       </html>`,
       { width, height },
