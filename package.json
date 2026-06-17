@@ -33,6 +33,8 @@
     "dev": "nodemon src/server.js",
     "proof:canonical-builder-pdf-parity": "node scripts/prove-canonical-builder-pdf-parity.mjs",
     "test": "node scripts/run-jest.cjs",
+    "test:unit": "node scripts/run-jest.cjs tests/unit",
+    "test:integration": "node scripts/run-jest.cjs tests/integration",
     "test:watch": "node scripts/run-jest.cjs --watch",
     "test:coverage": "node scripts/run-jest.cjs --coverage",
     "test:ci": "node scripts/run-jest.cjs --ci --coverage --watchAll=false"
