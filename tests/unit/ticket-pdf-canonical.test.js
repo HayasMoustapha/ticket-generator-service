@@ -18,6 +18,7 @@ jest.mock('../../src/core/templates/html-template.service', () => ({
   prepareTemplate: jest.fn(),
   loadTemplateContent: jest.fn(),
   renderSvgToPdf: jest.fn(),
+  renderSvgToExactRasterPdf: jest.fn(),
   renderTemplateToPdf: jest.fn(),
   findFileRecursive: jest.fn(),
 }));
@@ -96,9 +97,13 @@ describe('ticket PDF canonical rendering', () => {
     });
 
     let capturedSvg = null;
-    htmlTemplateService.renderSvgToPdf.mockImplementation(async (svgMarkup) => {
+    htmlTemplateService.renderSvgToExactRasterPdf.mockImplementation(async (svgMarkup) => {
       capturedSvg = svgMarkup;
-      return Buffer.from('pdf-buffer');
+      return {
+        pdfBuffer: Buffer.from('pdf-buffer'),
+        pngSha256: 'exact-raster-sha',
+        scale: 1,
+      };
     });
 
     const enrichedTicket = {
@@ -132,8 +137,12 @@ describe('ticket PDF canonical rendering', () => {
     const artifact = await canonicalTicketGenerationService.generatePDFArtifact(enrichedTicket);
 
     expect(artifact.renderMode).toBe('archived-builder-manifest');
-    expect(artifact.renderEngine).toBe('chromium-svg-fallback-pdf');
+    expect(artifact.renderEngine).toBe('chromium-raster-pdf');
+    expect(artifact.canonicalProcess).toBe('ticket-generator-exact-raster-pdf');
+    expect(artifact.exactRasterSha256).toBe('exact-raster-sha');
+    expect(artifact.renderScale).toBe(1);
     expect(artifact.pdfBuffer.equals(Buffer.from('pdf-buffer'))).toBe(true);
+    expect(htmlTemplateService.renderSvgToPdf).not.toHaveBeenCalled();
     expect(capturedSvg).toContain('Builder Summit');
     expect(capturedSvg).toContain('Mireille Tchoumi');
     expect(capturedSvg).toContain('Hosted by Governor Organizer');
@@ -146,7 +155,10 @@ describe('ticket PDF canonical rendering', () => {
     const artifactSpy = jest.spyOn(canonicalTicketGenerationService, 'generatePDFArtifact').mockResolvedValue({
       pdfBuffer: Buffer.from('pdf-direct'),
       renderMode: 'archived-builder-manifest',
-      renderEngine: 'chromium-svg-fallback-pdf',
+      renderEngine: 'chromium-raster-pdf',
+      canonicalProcess: 'ticket-generator-exact-raster-pdf',
+      exactRasterSha256: 'direct-raster-sha',
+      renderScale: 1,
     });
 
     const result = await pdfService.generateTicketPDF(
@@ -175,7 +187,10 @@ describe('ticket PDF canonical rendering', () => {
 
     expect(result.success).toBe(true);
     expect(result.renderMode).toBe('archived-builder-manifest');
-    expect(result.renderEngine).toBe('chromium-svg-fallback-pdf');
+    expect(result.renderEngine).toBe('chromium-raster-pdf');
+    expect(result.canonicalProcess).toBe('ticket-generator-exact-raster-pdf');
+    expect(result.exactRasterSha256).toBe('direct-raster-sha');
+    expect(result.renderScale).toBe(1);
     expect(result.pdfBase64).toBe(Buffer.from('pdf-direct').toString('base64'));
     expect(artifactSpy).toHaveBeenCalledTimes(1);
     expect(artifactSpy).toHaveBeenCalledWith(
@@ -434,6 +449,8 @@ describe('ticket PDF canonical rendering', () => {
               align: 'left',
               rotation: 0,
               radius: 0,
+              lineHeight: 1.35,
+              letterSpacing: 4,
               visible: true,
               opacity: 1,
               fillColor: '#FFFFFF',
@@ -460,6 +477,7 @@ describe('ticket PDF canonical rendering', () => {
 
     expect(svg).toContain('Dynamic Guest');
     expect(svg).toContain('Layer');
+    expect(svg).toContain('letter-spacing="4"');
     expect(svg).not.toContain('Archived placeholder');
   });
 

@@ -93,22 +93,26 @@ try {
 
   const artifact = await ticketGenerationService.generatePDFArtifact(enrichedTicket);
   assert.equal(artifact.renderMode, "archived-builder-manifest");
-  assert.equal(artifact.renderEngine, "chromium-svg-fallback-pdf");
+  assert.equal(artifact.renderEngine, "chromium-raster-pdf");
+  assert.equal(artifact.canonicalProcess, "ticket-generator-exact-raster-pdf");
+  assert.ok(artifact.exactRasterSha256, "Ticket-generator exact raster hash must be exposed.");
 
   const exactRasterSubject = artifact.pdfBuffer.includes("exact-raster-sha256:")
     ? "embedded-exact-raster-hash-present"
     : "";
   assert.ok(
-    !exactRasterSubject,
-    "Ticket-generator fallback must not masquerade as canonical exact-raster output.",
+    exactRasterSubject,
+    "Ticket-generator exact raster PDF must embed the raster hash in PDF metadata.",
   );
 
   result = {
     ok: true,
-    canonicalProcess: "frontend-exact-raster-pdf",
+    canonicalProcess: artifact.canonicalProcess,
     renderMode: artifact.renderMode,
     renderEngine: artifact.renderEngine,
-    parityStatus: "skipped-non-canonical-fallback",
+    parityStatus: "ticket-generator-exact-raster-pdf",
+    exactRasterSha256: artifact.exactRasterSha256,
+    renderScale: artifact.renderScale,
     exactRasterSubject,
     templateArchivePath,
   };
