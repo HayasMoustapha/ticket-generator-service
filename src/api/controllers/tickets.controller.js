@@ -58,6 +58,36 @@ async function fetchEnrichedTicket(ticketId) {
   return payload.data;
 }
 
+/**
+ * Classe une erreur de génération/récupération en un code + statut HTTP stable,
+ * pour éviter de renvoyer un 500 générique au client.
+ * @param {Error} error
+ * @returns {{ status: number, code: string, message: string }}
+ */
+function classifyTicketRenderError(error) {
+  const message = (error && error.message) || 'Erreur inconnue';
+  const lower = message.toLowerCase();
+
+  if (lower.includes('enriched ticket lookup failed') || lower.includes('non trouvé') || lower.includes('not found')) {
+    return { status: 404, code: 'TICKET_NOT_FOUND', message: 'Ticket introuvable ou données enrichies indisponibles' };
+  }
+  if (lower.includes('template') && (lower.includes('manquant') || lower.includes('missing') || lower.includes('introuvable'))) {
+    return { status: 422, code: 'TEMPLATE_NOT_FOUND', message: `Template du ticket indisponible: ${message}` };
+  }
+  if (
+    lower.includes('render') ||
+    lower.includes('chromium') ||
+    lower.includes('puppeteer') ||
+    lower.includes('playwright') ||
+    lower.includes('svg') ||
+    lower.includes('raster')
+  ) {
+    return { status: 502, code: 'TICKET_RENDER_FAILED', message: `Échec du rendu du ticket: ${message}` };
+  }
+
+  return { status: 500, code: 'TICKET_GENERATION_FAILED', message };
+}
+
 async function buildTicketPdfBuffer(ticketId) {
   const enrichedTicket = await fetchEnrichedTicket(ticketId);
   const artifact = await ticketGenerationService.generatePDFArtifact(enrichedTicket);
@@ -272,7 +302,10 @@ class TicketsController {
               pdfBase64: pdfResult.pdfBase64,
               generatedAt: pdfResult.generatedAt,
               renderMode: pdfResult.renderMode,
-              renderEngine: pdfResult.renderEngine
+              renderEngine: pdfResult.renderEngine,
+              canonicalProcess: pdfResult.canonicalProcess,
+              exactRasterSha256: pdfResult.exactRasterSha256,
+              renderScale: pdfResult.renderScale
             };
           } else {
             logger.warn('PDF generation failed, returning QR only', {
@@ -426,7 +459,10 @@ class TicketsController {
           pdfBase64,
           generatedAt,
           renderMode: pdfResult.renderMode,
-          renderEngine: pdfResult.renderEngine
+          renderEngine: pdfResult.renderEngine,
+          canonicalProcess: pdfResult.canonicalProcess,
+          exactRasterSha256: pdfResult.exactRasterSha256,
+          renderScale: pdfResult.renderScale
         })
       );
     } catch (error) {
@@ -518,12 +554,19 @@ class TicketsController {
       res.setHeader('Content-Length', qrBuffer.length);
       res.send(qrBuffer);
     } catch (error) {
+      const classified = classifyTicketRenderError(error);
       logger.error('Get QR code failed', {
         ticketId: req.params.ticketId,
+        code: classified.code,
         error: error.message,
         stack: error.stack
       });
-      next(error);
+      if (res.headersSent) {
+        return next(error);
+      }
+      return res.status(classified.status).json(
+        errorResponse(classified.message, null, classified.code)
+      );
     }
   }
 
@@ -541,16 +584,23 @@ class TicketsController {
           pdfData: artifact.pdfBuffer.toString('base64'),
           retrievedAt: new Date().toISOString(),
           renderMode: artifact.renderMode,
-          renderEngine: artifact.renderEngine
+          renderEngine: artifact.renderEngine,
+          canonicalProcess: artifact.canonicalProcess,
+          exactRasterSha256: artifact.exactRasterSha256,
+          renderScale: artifact.renderScale
         })
       );
     } catch (error) {
+      const classified = classifyTicketRenderError(error);
       logger.error('Get PDF failed', {
         ticketId: req.params.ticketId,
+        code: classified.code,
         error: error.message,
         stack: error.stack
       });
-      next(error);
+      return res.status(classified.status).json(
+        errorResponse(classified.message, null, classified.code)
+      );
     }
   }
 
@@ -646,10 +696,15 @@ class TicketsController {
         regeneratePDF
       });
       
-      // Vérification si la régénération a échoué
+      // Vérification si la régénération a échoué — codes d'erreur stables, pas de 500 générique
       if (!regenerateResult.success) {
+        if (regenerateResult.code === 'TICKET_NOT_FOUND') {
+          return res.status(404).json(
+            errorResponse('Ticket non trouvé', regenerateResult.error, 'TICKET_NOT_FOUND')
+          );
+        }
         return res.status(500).json(
-          errorResponse('Échec de régénération du ticket', regenerateResult.error, 'TICKET_REGENERATION_FAILED')
+          errorResponse('Échec de régénération du ticket', regenerateResult.error, regenerateResult.code || 'TICKET_REGENERATION_FAILED')
         );
       }
       
@@ -678,25 +733,27 @@ class TicketsController {
     try {
       // Extraction de l'ID du ticket depuis les paramètres de l'URL
       const { ticketId } = req.params;
-      
-      // Simulation de suppression (remplacer par logique réelle)
-      const deleted = true;
-      
-      if (!deleted) {
-        return res.status(404).json(
-          errorResponse('Ticket non trouvé', null, 'TICKET_NOT_FOUND')
+
+      // Suppression réelle via le service batch (DB)
+      const deleteResult = await batchService.deleteTicket(ticketId);
+
+      if (!deleteResult.success) {
+        if (deleteResult.code === 'TICKET_NOT_FOUND') {
+          return res.status(404).json(
+            errorResponse('Ticket non trouvé', deleteResult.error, 'TICKET_NOT_FOUND')
+          );
+        }
+        return res.status(500).json(
+          errorResponse('Échec de suppression du ticket', deleteResult.error, deleteResult.code || 'TICKET_DELETION_FAILED')
         );
       }
-      
+
       // Enregistrement de la suppression dans les logs
       logger.info('Ticket deleted successfully', { ticketId });
-      
+
       // Retour de la confirmation de suppression
       return res.status(200).json(
-        successResponse('Ticket supprimé avec succès', {
-          ticketId,
-          deletedAt: new Date().toISOString()
-        })
+        successResponse('Ticket supprimé avec succès', deleteResult.data)
       );
     } catch (error) {
       // En cas d'erreur, on l'enregistre dans les logs
@@ -776,6 +833,15 @@ class TicketsController {
       res.setHeader('Content-Length', artifact.pdfBuffer.length);
       res.setHeader('x-event-planner-ticket-render-mode', artifact.renderMode);
       res.setHeader('x-event-planner-ticket-render-engine', artifact.renderEngine);
+      if (artifact.canonicalProcess) {
+        res.setHeader('x-event-planner-ticket-canonical-process', artifact.canonicalProcess);
+      }
+      if (artifact.exactRasterSha256) {
+        res.setHeader('x-event-planner-ticket-exact-raster-sha256', artifact.exactRasterSha256);
+      }
+      if (artifact.renderScale) {
+        res.setHeader('x-event-planner-ticket-render-scale', artifact.renderScale);
+      }
       res.send(artifact.pdfBuffer);
 
       logger.info('Ticket downloaded successfully', {
@@ -783,15 +849,25 @@ class TicketsController {
         templateId: enrichedTicket.template?.id || null,
         templateSource: enrichedTicket.template?.source_files_path || null,
         renderMode: artifact.renderMode,
-        renderEngine: artifact.renderEngine
+        renderEngine: artifact.renderEngine,
+        canonicalProcess: artifact.canonicalProcess,
+        exactRasterSha256: artifact.exactRasterSha256,
+        renderScale: artifact.renderScale
       });
     } catch (error) {
+      const classified = classifyTicketRenderError(error);
       logger.error('Ticket download failed', {
         ticketId: req.params.ticketId,
+        code: classified.code,
         error: error.message,
         stack: error.stack
       });
-      next(error);
+      if (res.headersSent) {
+        return next(error);
+      }
+      return res.status(classified.status).json(
+        errorResponse(classified.message, null, classified.code)
+      );
     }
   }
 
@@ -813,12 +889,19 @@ class TicketsController {
 
       logger.info('Ticket QR generated successfully', { ticketId });
     } catch (error) {
+      const classified = classifyTicketRenderError(error);
       logger.error('Ticket QR generation failed', {
         ticketId: req.params.ticketId,
+        code: classified.code,
         error: error.message,
         stack: error.stack
       });
-      next(error);
+      if (res.headersSent) {
+        return next(error);
+      }
+      return res.status(classified.status).json(
+        errorResponse(classified.message, null, classified.code)
+      );
     }
   }
 }

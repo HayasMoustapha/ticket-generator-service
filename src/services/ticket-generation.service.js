@@ -274,10 +274,14 @@ class TicketGenerationService {
               globalContent: renderContext.builderContent.global,
               recipientContent: renderContext.builderContent.recipient,
             });
+            const exactArtifact = await htmlTemplateService.renderSvgToExactRasterPdf(renderedSvg);
             return {
-              pdfBuffer: await htmlTemplateService.renderSvgToPdf(renderedSvg),
+              pdfBuffer: exactArtifact.pdfBuffer,
               renderMode: 'archived-builder-manifest',
-              renderEngine: 'chromium-svg-pdf'
+              renderEngine: 'chromium-raster-pdf',
+              canonicalProcess: 'ticket-generator-exact-raster-pdf',
+              exactRasterSha256: exactArtifact.pngSha256,
+              renderScale: exactArtifact.scale
             };
           }
 
@@ -513,6 +517,13 @@ class TicketGenerationService {
         },
         recipient: {
           guest: scopedVariables.RECIPIENT.GUEST_DISPLAY_NAME || 'Guest',
+          // MIROIR frontend: valeurs runtime réelles (chaîne vide significative ->
+          // déclenche le masquage des placeholders dynamiques optionnels).
+          guestEmail: scopedVariables.RECIPIENT.GUEST_EMAIL || '',
+          guestPhone: scopedVariables.RECIPIENT.GUEST_PHONE || '',
+          customFields: ticketData.custom_fields && typeof ticketData.custom_fields === 'object'
+            ? ticketData.custom_fields
+            : {},
           type: scopedVariables.RECIPIENT.TICKET_TYPE || 'Standard',
           ticketCode: scopedVariables.RECIPIENT.TICKET_CODE || String(mappedTicket.id || ''),
           qrDataUrl: scopedVariables.RECIPIENT.QR_CODE || null,
@@ -563,6 +574,10 @@ class TicketGenerationService {
       const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
       output = output.replace(regex, value ?? '');
     });
+
+    // Nettoyage final (MIROIR backend de la garantie frontend): tout placeholder
+    // `{{...}}` non résolu est supprimé pour ne jamais afficher de gabarit brut.
+    output = output.replace(/\{\{\s*[^{}]*?\s*\}\}/g, '');
 
     return output;
   }

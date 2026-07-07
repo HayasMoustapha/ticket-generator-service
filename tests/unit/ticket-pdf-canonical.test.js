@@ -18,6 +18,7 @@ jest.mock('../../src/core/templates/html-template.service', () => ({
   prepareTemplate: jest.fn(),
   loadTemplateContent: jest.fn(),
   renderSvgToPdf: jest.fn(),
+  renderSvgToExactRasterPdf: jest.fn(),
   renderTemplateToPdf: jest.fn(),
   findFileRecursive: jest.fn(),
 }));
@@ -96,9 +97,13 @@ describe('ticket PDF canonical rendering', () => {
     });
 
     let capturedSvg = null;
-    htmlTemplateService.renderSvgToPdf.mockImplementation(async (svgMarkup) => {
+    htmlTemplateService.renderSvgToExactRasterPdf.mockImplementation(async (svgMarkup) => {
       capturedSvg = svgMarkup;
-      return Buffer.from('pdf-buffer');
+      return {
+        pdfBuffer: Buffer.from('pdf-buffer'),
+        pngSha256: 'exact-raster-sha',
+        scale: 1,
+      };
     });
 
     const enrichedTicket = {
@@ -132,12 +137,17 @@ describe('ticket PDF canonical rendering', () => {
     const artifact = await canonicalTicketGenerationService.generatePDFArtifact(enrichedTicket);
 
     expect(artifact.renderMode).toBe('archived-builder-manifest');
-    expect(artifact.renderEngine).toBe('chromium-svg-pdf');
+    expect(artifact.renderEngine).toBe('chromium-raster-pdf');
+    expect(artifact.canonicalProcess).toBe('ticket-generator-exact-raster-pdf');
+    expect(artifact.exactRasterSha256).toBe('exact-raster-sha');
+    expect(artifact.renderScale).toBe(1);
     expect(artifact.pdfBuffer.equals(Buffer.from('pdf-buffer'))).toBe(true);
+    expect(htmlTemplateService.renderSvgToPdf).not.toHaveBeenCalled();
     expect(capturedSvg).toContain('Builder Summit');
     expect(capturedSvg).toContain('Mireille Tchoumi');
     expect(capturedSvg).toContain('Hosted by Governor Organizer');
     expect(capturedSvg).toContain('TKT-BUILDER-001');
+    expect(capturedSvg).not.toContain('ARCHIVED-CODE-001');
     expect(capturedSvg).not.toContain('LEGACY TEMPLATE SHOULD NOT WIN');
   });
 
@@ -145,7 +155,10 @@ describe('ticket PDF canonical rendering', () => {
     const artifactSpy = jest.spyOn(canonicalTicketGenerationService, 'generatePDFArtifact').mockResolvedValue({
       pdfBuffer: Buffer.from('pdf-direct'),
       renderMode: 'archived-builder-manifest',
-      renderEngine: 'chromium-svg-pdf',
+      renderEngine: 'chromium-raster-pdf',
+      canonicalProcess: 'ticket-generator-exact-raster-pdf',
+      exactRasterSha256: 'direct-raster-sha',
+      renderScale: 1,
     });
 
     const result = await pdfService.generateTicketPDF(
@@ -174,7 +187,10 @@ describe('ticket PDF canonical rendering', () => {
 
     expect(result.success).toBe(true);
     expect(result.renderMode).toBe('archived-builder-manifest');
-    expect(result.renderEngine).toBe('chromium-svg-pdf');
+    expect(result.renderEngine).toBe('chromium-raster-pdf');
+    expect(result.canonicalProcess).toBe('ticket-generator-exact-raster-pdf');
+    expect(result.exactRasterSha256).toBe('direct-raster-sha');
+    expect(result.renderScale).toBe(1);
     expect(result.pdfBase64).toBe(Buffer.from('pdf-direct').toString('base64'));
     expect(artifactSpy).toHaveBeenCalledTimes(1);
     expect(artifactSpy).toHaveBeenCalledWith(
@@ -238,11 +254,231 @@ describe('ticket PDF canonical rendering', () => {
     expect(svg).toContain('Live Global Title');
     expect(svg).toContain('Live Footer');
     expect(svg).toContain('>Guest<');
-    expect(svg).toContain('>STANDARD<');
-    expect(svg).toContain('TKT-SAMPLE-0001');
+    expect(svg).toContain('>ARCHIVED SAMPLE TYPE<');
+    expect(svg).toContain('ARCHIVED-CODE-999');
     expect(svg).not.toContain('Archived Sample Guest');
-    expect(svg).not.toContain('ARCHIVED-CODE-999');
-    expect(svg).not.toContain('Archived Sample Type');
+  });
+
+  it('limits archived builder recipient overrides to approved dynamic fields', () => {
+    const svg = buildArchivedBuilderTicketSvg({
+      builderConfig: {
+        design: {
+          backgroundColor: '#08131D',
+          accentColor: '#39C98B',
+          textColor: '#FFFFFF',
+          subTextColor: 'rgba(255,255,255,0.68)',
+          pattern: 'none',
+          canvasPresetId: 'ticket-landscape',
+        },
+        content: {
+          title: 'Archived Global Title',
+          guest: 'Archived Sample Guest',
+          ticketCode: 'ARCHIVED-CODE-999',
+          type: 'Archived Sample Type',
+          footerLabel: 'Archived Footer',
+        },
+      },
+      globalContent: {
+        title: 'Live Global Title',
+        date: '2026-10-01',
+        time: '19:30',
+        location: 'Douala',
+        footerLabel: 'Live Footer',
+      },
+      recipientContent: {
+        guest: 'Live Guest Name',
+        type: 'Backstage',
+        ticketCode: 'LIVE-CODE-123',
+        qrDataUrl: 'data:image/png;base64,qrpayload',
+      },
+      recipientDynamicFields: ['guest', 'qrDataUrl'],
+    });
+
+    expect(svg).toContain('Live Guest Name');
+    expect(svg).toContain('ARCHIVED-CODE-999');
+    expect(svg).toContain('ARCHIVED SAMPLE TYPE');
+    expect(svg).not.toContain('LIVE-CODE-123');
+    expect(svg).not.toContain('BACKSTAGE');
+    expect(svg).toContain('data:image/png;base64,qrpayload');
+  });
+
+  it('keeps explicitly static archived builder bindings frozen at runtime', () => {
+    const svg = buildArchivedBuilderTicketSvg({
+      builderConfig: {
+        design: {
+          backgroundColor: '#08131D',
+          accentColor: '#39C98B',
+          textColor: '#FFFFFF',
+          subTextColor: 'rgba(255,255,255,0.68)',
+          pattern: 'none',
+          canvasPresetId: 'ticket-landscape',
+          layers: [
+            {
+              id: 'title',
+              binding: 'title',
+              kind: 'title',
+              label: 'Title',
+              dynamicField: null,
+              x: 42,
+              y: 98,
+              width: 446,
+              height: 78,
+              fontSize: 42,
+              fontWeight: 800,
+              align: 'left',
+              opacity: 1,
+              radius: 10,
+              visible: true,
+              locked: false,
+            },
+            {
+              id: 'guest',
+              binding: 'guest',
+              kind: 'guest',
+              label: 'Guest block',
+              dynamicField: 'guest_name',
+              dynamicMaxLines: 2,
+              x: 42,
+              y: 284,
+              width: 282,
+              height: 78,
+              fontSize: 30,
+              fontWeight: 800,
+              align: 'left',
+              opacity: 1,
+              radius: 10,
+              visible: true,
+              locked: false,
+            },
+            {
+              id: 'type',
+              binding: 'type',
+              kind: 'type',
+              label: 'Type badge',
+              dynamicField: null,
+              x: 42,
+              y: 344,
+              width: 220,
+              height: 36,
+              fontSize: 15,
+              fontWeight: 800,
+              align: 'left',
+              opacity: 1,
+              radius: 10,
+              visible: true,
+              locked: false,
+            },
+            {
+              id: 'code',
+              binding: 'code',
+              kind: 'code',
+              label: 'Ticket code',
+              dynamicField: null,
+              x: 42,
+              y: 392,
+              width: 240,
+              height: 22,
+              fontSize: 14,
+              fontWeight: 700,
+              align: 'left',
+              opacity: 1,
+              radius: 10,
+              visible: true,
+              locked: false,
+            },
+          ],
+        },
+        content: {
+          title: 'Archived Static Title',
+          guest: 'Archived Guest',
+          type: 'Archived Type',
+          ticketCode: 'ARCHIVED-CODE-001',
+          footerLabel: 'Archived Footer',
+        },
+      },
+      globalContent: {
+        title: 'Live Global Title',
+        date: '2026-10-01',
+        time: '19:30',
+        location: 'Douala',
+        footerLabel: 'Live Footer',
+      },
+      recipientContent: {
+        guest: 'Live Guest Name',
+        type: 'Backstage',
+        ticketCode: 'LIVE-CODE-123',
+        qrDataUrl: null,
+      },
+    });
+
+    expect(svg).toContain('Archived Static');
+    expect(svg).toContain('Title');
+    expect(svg).not.toContain('Live Global Title');
+    expect(svg).toContain('Live Guest Name');
+    expect(svg).toContain('ARCHIVED-CODE-001');
+    expect(svg).not.toContain('LIVE-CODE-123');
+    expect(svg).toContain('ARCHIVED TYPE');
+    expect(svg).not.toContain('BACKSTAGE');
+  });
+
+  it('renders custom text layers tagged as guest_name from recipient data', () => {
+    const svg = buildArchivedBuilderTicketSvg({
+      builderConfig: {
+        design: {
+          backgroundColor: '#08131D',
+          accentColor: '#39C98B',
+          textColor: '#FFFFFF',
+          subTextColor: 'rgba(255,255,255,0.68)',
+          pattern: 'none',
+          canvasPresetId: 'ticket-landscape',
+          layers: [
+            {
+              id: 'guest-dynamic-copy',
+              binding: 'footer',
+              kind: 'custom-text',
+              label: 'Guest copy',
+              customText: 'Archived placeholder',
+              dynamicField: 'guest_name',
+              dynamicMaxLines: 2,
+              x: 42,
+              y: 284,
+              width: 282,
+              height: 78,
+              fontSize: 30,
+              fontWeight: 800,
+              align: 'left',
+              rotation: 0,
+              radius: 0,
+              lineHeight: 1.35,
+              letterSpacing: 4,
+              visible: true,
+              opacity: 1,
+              fillColor: '#FFFFFF',
+            },
+          ],
+        },
+        content: {
+          title: 'Archived Global Title',
+        },
+      },
+      globalContent: {
+        title: 'Live Global Title',
+        date: '2026-10-01',
+        time: '19:30',
+        location: 'Douala',
+        footerLabel: 'Live Footer',
+      },
+      recipientContent: {
+        guest: 'Dynamic Guest Layer',
+        qrDataUrl: null,
+      },
+      recipientDynamicFields: ['guest', 'qrDataUrl'],
+    });
+
+    expect(svg).toContain('Dynamic Guest');
+    expect(svg).toContain('Layer');
+    expect(svg).toContain('letter-spacing="4"');
+    expect(svg).not.toContain('Archived placeholder');
   });
 
   it('replaces scoped template placeholders for global and recipient fields', () => {

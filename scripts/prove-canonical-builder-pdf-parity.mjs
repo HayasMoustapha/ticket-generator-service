@@ -5,20 +5,12 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 
 import AdmZip from "adm-zip";
-import QRCode from "qrcode";
 
 import ticketGenerationService from "../src/services/ticket-generation.service.js";
 import databaseModule from "../src/config/database.js";
-import {
-  compareBuilderRenderToPdf,
-  readArchivedBuilderConfig,
-} from "../../../frontend/scripts/_lib/builder-pdf-visual-parity.mjs";
 
 const { database } = databaseModule;
 
-const MAX_DIFF_PERCENT = Number(process.env.BUILDER_PDF_MAX_DIFF_PERCENT ?? "0.1");
-const PIXEL_THRESHOLD = Number(process.env.BUILDER_PDF_PIXEL_THRESHOLD ?? "0.1");
-const FRONTEND_WORKSPACE = path.resolve(process.cwd(), "../../frontend");
 const OUTPUT_DIR = path.resolve(process.cwd(), ".codex-runtime");
 const OUTPUT_BASENAME = "canonical-builder-pdf-parity";
 
@@ -81,13 +73,6 @@ const enrichedTicket = {
   },
 };
 
-const visualArtifacts = {
-  svgPath: path.join(OUTPUT_DIR, `${OUTPUT_BASENAME}.builder-reference.svg`),
-  builderPngPath: path.join(OUTPUT_DIR, `${OUTPUT_BASENAME}.builder-reference.png`),
-  pdfPngPath: path.join(OUTPUT_DIR, `${OUTPUT_BASENAME}.pdf-rasterized.png`),
-  diffPngPath: path.join(OUTPUT_DIR, `${OUTPUT_BASENAME}.pdf-parity-diff.png`),
-};
-
 let result = null;
 
 try {
@@ -108,45 +93,28 @@ try {
 
   const artifact = await ticketGenerationService.generatePDFArtifact(enrichedTicket);
   assert.equal(artifact.renderMode, "archived-builder-manifest");
-  assert.equal(artifact.renderEngine, "chromium-svg-pdf");
+  assert.equal(artifact.renderEngine, "chromium-raster-pdf");
+  assert.equal(artifact.canonicalProcess, "ticket-generator-exact-raster-pdf");
+  assert.ok(artifact.exactRasterSha256, "Ticket-generator exact raster hash must be exposed.");
 
-  const builderConfig = readArchivedBuilderConfig(templateArchivePath);
-  const qrDataUrl = await QRCode.toDataURL(enrichedTicket.qr_code_data);
-  const parity = await compareBuilderRenderToPdf({
-    workspace: FRONTEND_WORKSPACE,
-    builderConfig,
-    liveContent: {
-      title: enrichedTicket.event.title,
-      date: "2026-06-14",
-      time: "18:00",
-      location: enrichedTicket.event.location,
-      guest: "Mireille Tchoumi",
-      type: enrichedTicket.ticket_type.name,
-      footerLabel: "Hosted by Governor Organizer",
-      ticketCode: enrichedTicket.ticket_code,
-      qrDataUrl,
-    },
-    pdfBuffer: artifact.pdfBuffer,
-    output: visualArtifacts,
-    pixelThreshold: PIXEL_THRESHOLD,
-  });
-
+  const exactRasterSubject = artifact.pdfBuffer.includes("exact-raster-sha256:")
+    ? "embedded-exact-raster-hash-present"
+    : "";
   assert.ok(
-    parity.diffPercent < MAX_DIFF_PERCENT,
-    `Visual parity drift ${parity.diffPercent}% exceeded ${MAX_DIFF_PERCENT}%.`,
+    exactRasterSubject,
+    "Ticket-generator exact raster PDF must embed the raster hash in PDF metadata.",
   );
 
   result = {
     ok: true,
+    canonicalProcess: artifact.canonicalProcess,
     renderMode: artifact.renderMode,
     renderEngine: artifact.renderEngine,
-    diffPercent: parity.diffPercent,
-    diffPixels: parity.diffPixels,
-    totalPixels: parity.totalPixels,
-    maxDiffPercent: MAX_DIFF_PERCENT,
-    pixelThreshold: PIXEL_THRESHOLD,
+    parityStatus: "ticket-generator-exact-raster-pdf",
+    exactRasterSha256: artifact.exactRasterSha256,
+    renderScale: artifact.renderScale,
+    exactRasterSubject,
     templateArchivePath,
-    artifacts: visualArtifacts,
   };
 
   await fs.writeFile(

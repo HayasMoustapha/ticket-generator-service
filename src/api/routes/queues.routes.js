@@ -51,6 +51,7 @@ router.get('/stats', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to retrieve queue statistics',
+      code: 'QUEUE_STATS_FAILED',
       message: error.message,
       timestamp: new Date().toISOString()
     });
@@ -68,6 +69,7 @@ router.get('/health', async (req, res) => {
       return res.status(503).json({
         success: false,
         error: 'Queue service not initialized',
+        code: 'QUEUE_SERVICE_NOT_INITIALIZED',
         message: 'Le service de queue n\'est pas initialisé',
         timestamp: new Date().toISOString()
       });
@@ -102,6 +104,7 @@ router.get('/health', async (req, res) => {
     return res.status(503).json({
       success: false,
       error: 'Queue health check failed',
+      code: 'QUEUE_HEALTH_CHECK_FAILED',
       message: error.message,
       timestamp: new Date().toISOString()
     });
@@ -157,6 +160,7 @@ router.post('/restart', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Queue service restart failed',
+      code: 'QUEUE_RESTART_FAILED',
       message: error.message,
       timestamp: new Date().toISOString()
     });

@@ -258,6 +258,105 @@ function getBuilderLayerBindingId(layer) {
   return "footer";
 }
 
+function supportsBuilderDynamicField(layer, field) {
+  const bindingId = layer && layer.binding ? layer.binding : null;
+
+  switch (field) {
+    case "qr_code":
+      return layer && layer.kind === "qr" || bindingId === "qr";
+    case "event_title":
+      return bindingId === "title";
+    case "event_schedule":
+      return bindingId === "schedule";
+    case "event_location":
+      return bindingId === "venue";
+    case "guest_name":
+      return layer && layer.kind === "custom-text" || bindingId === "guest";
+    case "guest_email":
+    case "guest_phone":
+    case "custom_field":
+      // MIROIR frontend: ces placeholders dynamiques vivent sur un calque
+      // custom-text (champ libre) ou sur le bloc guest.
+      return (layer && layer.kind === "custom-text") || bindingId === "guest";
+    case "ticket_type":
+      return bindingId === "type";
+    case "ticket_code":
+      return bindingId === "code";
+    case "organizer_footer":
+      return bindingId === "footer";
+    default:
+      return false;
+  }
+}
+
+function resolveDefaultBuilderDynamicField(bindingId) {
+  switch (bindingId) {
+    case "title":
+      return "event_title";
+    case "schedule":
+      return "event_schedule";
+    case "venue":
+      return "event_location";
+    case "guest":
+      return "guest_name";
+    case "type":
+      return "ticket_type";
+    case "code":
+      return "ticket_code";
+    case "footer":
+      return "organizer_footer";
+    case "qr":
+      return "qr_code";
+    default:
+      return null;
+  }
+}
+
+function resolveBuilderLayerDynamicField(layer) {
+  const hasExplicitDynamicField =
+    Boolean(layer) &&
+    Object.prototype.hasOwnProperty.call(layer, "dynamicField");
+
+  if (hasExplicitDynamicField) {
+    if (layer && layer.dynamicField && supportsBuilderDynamicField(layer, layer.dynamicField)) {
+      return layer.dynamicField;
+    }
+
+    return null;
+  }
+
+  return resolveDefaultBuilderDynamicField(getBuilderLayerBindingId(layer));
+}
+
+/**
+ * MIROIR du frontend (resolveBuilderDynamicTextValue) : résout la valeur runtime
+ * d'un placeholder texte recipient/global (guest_name, guest_email, guest_phone,
+ * custom_field). Retourne null si le champ n'est pas un de ces placeholders texte.
+ * La chaîne vide est un résultat significatif et distinct (utilisé pour décider de
+ * masquer un calque optionnel).
+ */
+function resolveBuilderDynamicTextValue(field, layer, values) {
+  const runtime = values || {};
+  switch (field) {
+    case "guest_name":
+      return typeof runtime.guest === "string" ? runtime.guest : "";
+    case "guest_email":
+      return typeof runtime.guestEmail === "string" ? runtime.guestEmail : "";
+    case "guest_phone":
+      return typeof runtime.guestPhone === "string" ? runtime.guestPhone : "";
+    case "custom_field": {
+      const key = layer && typeof layer.customFieldKey === "string" ? layer.customFieldKey.trim() : "";
+      if (!key) {
+        return "";
+      }
+      const customFields = runtime.customFields && typeof runtime.customFields === "object" ? runtime.customFields : {};
+      return typeof customFields[key] === "string" ? customFields[key] : "";
+    }
+    default:
+      return null;
+  }
+}
+
 function getBuilderCanvasPreset(canvasPresetId = "ticket-landscape", canvasSize = null) {
   const preset =
     BUILDER_CANVAS_PRESETS.find((candidate) => candidate.id === canvasPresetId) || BUILDER_CANVAS_PRESETS[0];
@@ -291,6 +390,8 @@ function createDefaultLayer(
   return {
     id,
     binding: id,
+    dynamicField: resolveDefaultBuilderDynamicField(id),
+    dynamicMaxLines: id === "guest" ? 3 : 2,
     kind,
     label,
     x,
@@ -302,6 +403,8 @@ function createDefaultLayer(
     align,
     opacity: 1,
     radius,
+    lineHeight: 1.08,
+    letterSpacing: 0,
     visible: true,
     locked: false,
     groupId: null,
@@ -437,6 +540,20 @@ function normalizeBuilderLayers(layers, canvasPresetId = "ticket-landscape", can
         typeof candidate.fontFamily === "string" && candidate.fontFamily.trim()
           ? candidate.fontFamily
           : baseLayer.fontFamily || null,
+      lineHeight: clamp(
+        typeof candidate.lineHeight === "number" && Number.isFinite(candidate.lineHeight)
+          ? candidate.lineHeight
+          : baseLayer.lineHeight || 1.08,
+        0.8,
+        2.4,
+      ),
+      letterSpacing: clamp(
+        typeof candidate.letterSpacing === "number" && Number.isFinite(candidate.letterSpacing)
+          ? candidate.letterSpacing
+          : baseLayer.letterSpacing || 0,
+        0,
+        64,
+      ),
       fillColor:
         typeof candidate.fillColor === "string" && candidate.fillColor.trim()
           ? candidate.fillColor
@@ -482,6 +599,18 @@ function normalizeBuilderLayers(layers, canvasPresetId = "ticket-landscape", can
         typeof candidate.rotation === "number" && Number.isFinite(candidate.rotation)
           ? candidate.rotation
           : baseLayer.rotation || 0,
+      // MIROIR frontend: flag "optionnel" (masque le calque si valeur runtime vide)
+      dynamicOptional:
+        typeof candidate.dynamicOptional === "boolean"
+          ? candidate.dynamicOptional
+          : typeof baseLayer.dynamicOptional === "boolean"
+            ? baseLayer.dynamicOptional
+            : false,
+      // MIROIR frontend: clé libre pour le placeholder custom_field
+      customFieldKey:
+        typeof candidate.customFieldKey === "string" && candidate.customFieldKey.trim()
+          ? candidate.customFieldKey.trim()
+          : baseLayer.customFieldKey || null,
     };
   });
 
@@ -490,21 +619,42 @@ function normalizeBuilderLayers(layers, canvasPresetId = "ticket-landscape", can
     return !hydratedLayers.some((layer) => getBuilderLayerBindingId(layer) === bindingId);
   });
 
-  return [...hydratedLayers, ...missingDefaultLayers];
+  const resolvedLayers = [...hydratedLayers, ...missingDefaultLayers];
+
+  // GARANTIE QR (MIROIR frontend): le QR est le seul placeholder qui ne peut jamais
+  // être supprimé ou masqué — un ticket sans QR scannable n'est pas un ticket valide.
+  // On garantit au moins un calque QR visible, peu importe l'état de visibilité ou de
+  // suppression sauvegardé.
+  const qrLayers = resolvedLayers.filter((layer) => getBuilderLayerBindingId(layer) === "qr");
+  const hasVisibleQr = qrLayers.some((layer) => layer.visible);
+  if (!hasVisibleQr) {
+    if (qrLayers.length > 0) {
+      qrLayers[0].visible = true;
+    } else {
+      const defaultQr = defaults.find((layer) => getBuilderLayerBindingId(layer) === "qr");
+      if (defaultQr) {
+        resolvedLayers.push({ ...defaultQr, visible: true });
+      }
+    }
+  }
+
+  return resolvedLayers;
 }
 
-function renderTextBlockLines(layer, lines, fill, lineHeight) {
+function renderTextBlockLines(layer, lines, fill) {
   const safeLines = lines.map((line) => escapeSvgText(line));
   const anchor = getTextAnchor(layer.align);
   const anchorX = getAnchorX(layer);
   const firstLineY = layer.y + layer.fontSize;
+  const lineHeight = Math.round(layer.fontSize * (layer.lineHeight || 1.08));
+  const letterSpacing = Math.max(0, layer.letterSpacing || 0);
   const tspanMarkup = safeLines
     .map((line, index) => `<tspan x="${anchorX}" dy="${index === 0 ? 0 : lineHeight}">${line}</tspan>`)
     .join("");
 
   return `<text x="${anchorX}" y="${firstLineY}" text-anchor="${anchor}" fill="${fill}" font-family="${escapeSvgText(
     layer.fontFamily || "Nunito, Arial, sans-serif",
-  )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" opacity="${layer.opacity}">${tspanMarkup}</text>`;
+  )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" letter-spacing="${letterSpacing}" opacity="${layer.opacity}">${tspanMarkup}</text>`;
 }
 
 function renderLabelAndValue(layer, label, value, textColor, subTextColor) {
@@ -514,12 +664,14 @@ function renderLabelAndValue(layer, label, value, textColor, subTextColor) {
   const labelSize = Math.max(11, Math.round(layer.fontSize * 0.55));
   const labelY = layer.y + labelSize;
   const valueTop = layer.y + labelSize + 14;
-  const wrappedValue = wrapText(value, layer.fontSize, layer.width, bindingId === "guest" ? 3 : 2);
+  const normalizedValue = String(value || "").replaceAll("â€¢", "\u2022");
+  const wrappedValue = wrapText(normalizedValue, layer.fontSize, layer.width, bindingId === "guest" ? 3 : 2);
   const safeValue = wrappedValue.map((line) => escapeSvgText(line));
+  const valueLineHeight = Math.round(layer.fontSize * (layer.lineHeight || 1.08));
+  const letterSpacing = Math.max(0, layer.letterSpacing || 0);
   const tspanMarkup = safeValue
     .map((line, index) => {
-      const lineHeight = Math.round(layer.fontSize * 1.15);
-      return `<tspan x="${anchorX}" dy="${index === 0 ? 0 : lineHeight}">${line}</tspan>`;
+      return `<tspan x="${anchorX}" dy="${index === 0 ? 0 : valueLineHeight}">${line}</tspan>`;
     })
     .join("");
 
@@ -529,7 +681,7 @@ function renderLabelAndValue(layer, label, value, textColor, subTextColor) {
     )}</text>
     <text x="${anchorX}" y="${valueTop + layer.fontSize}" text-anchor="${anchor}" fill="${layer.fillColor || textColor}" font-family="${escapeSvgText(
       layer.fontFamily || "Nunito, Arial, sans-serif",
-    )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" opacity="${layer.opacity}">${tspanMarkup}</text>
+    )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" letter-spacing="${letterSpacing}" opacity="${layer.opacity}">${tspanMarkup}</text>
   `;
 }
 
@@ -629,6 +781,34 @@ function buildTicketExportSvg(design) {
     }
 
     const bindingId = getBuilderLayerBindingId(layer);
+    const dynamicField = resolveBuilderLayerDynamicField(layer);
+    const dynamicTextValue = resolveBuilderDynamicTextValue(dynamicField, layer, {
+      guest: design.guest,
+      guestEmail: design.guestEmail,
+      guestPhone: design.guestPhone,
+      customFields: design.customFields,
+    });
+
+    // MIROIR frontend: un placeholder texte dynamique OPTIONNEL avec une valeur
+    // runtime vide ne rend rien (calque masqué), au lieu d'un fallback texte constant.
+    if (dynamicTextValue !== null && layer.dynamicOptional && !dynamicTextValue.trim()) {
+      return "";
+    }
+
+    // MIROIR frontend: les placeholders texte dynamiques (guest_name/guest_email/
+    // guest_phone/custom_field) portés par un calque non-guest rendent leur valeur
+    // runtime résolue.
+    if (dynamicTextValue !== null && bindingId !== "guest") {
+      const maxLines = clamp(Math.round(layer.dynamicMaxLines || 2), 1, 4);
+      const lines = wrapText(dynamicTextValue, layer.fontSize, layer.width, maxLines);
+      return applyLayerTransform(
+        layer,
+        `
+          ${buildGenericLayerImageMarkup(layer)}
+          ${renderTextBlockLines(layer, lines, layer.fillColor || design.textColor, Math.round(layer.fontSize * 1.12))}
+        `,
+      );
+    }
 
     if (layer.kind === "shape") {
       const fillColor = layer.fillColor || `${design.accentColor}26`;
@@ -678,7 +858,7 @@ function buildTicketExportSvg(design) {
         <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="${layer.surfaceFillEnabled === false ? "transparent" : badgeFill}" opacity="${layer.opacity}" />
         <text x="${layer.x + layer.width / 2}" y="${layer.y + layer.height / 2 + layer.fontSize * 0.34}" text-anchor="middle" fill="${badgeTextColor}" font-family="${escapeSvgText(
           layer.fontFamily || "Nunito, Arial, sans-serif",
-        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}">${escapeSvgText(label)}</text>
+        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" letter-spacing="${Math.max(0, layer.letterSpacing || 0)}">${escapeSvgText(label)}</text>
       `);
     }
 
@@ -738,7 +918,7 @@ function buildTicketExportSvg(design) {
         ${buildGenericLayerImageMarkup(layer)}
         <text x="${anchorX}" y="${layer.y + layer.fontSize}" text-anchor="${anchor}" fill="${layer.fillColor || design.subTextColor}" font-family="${escapeSvgText(
           layer.fontFamily || "'Roboto Mono', monospace",
-        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" opacity="${layer.opacity}">${escapeSvgText(design.ticketCode || "TKT-SAMPLE-0001")}</text>
+        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" letter-spacing="${Math.max(0, layer.letterSpacing || 0)}" opacity="${layer.opacity}">${escapeSvgText(design.ticketCode || "TKT-SAMPLE-0001")}</text>
       `);
     }
 
@@ -767,7 +947,7 @@ function buildTicketExportSvg(design) {
         <rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="${layer.surfaceFillEnabled === false ? "transparent" : typeFill}" opacity="${layer.opacity}" />
         <text x="${layer.x + layer.width / 2}" y="${layer.y + layer.height / 2 + layer.fontSize * 0.34}" text-anchor="middle" fill="${typeTextColor}" font-family="${escapeSvgText(
           layer.fontFamily || "Nunito, Arial, sans-serif",
-        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}">${escapeSvgText(String(design.type || "").toUpperCase())}</text>
+        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" letter-spacing="${Math.max(0, layer.letterSpacing || 0)}">${escapeSvgText(String(design.type || "").toUpperCase())}</text>
       `);
     }
 
@@ -776,7 +956,7 @@ function buildTicketExportSvg(design) {
       const anchorX = getAnchorX(layer);
       return applyLayerTransform(layer, `<text x="${anchorX}" y="${layer.y + layer.fontSize}" text-anchor="${anchor}" fill="${layer.fillColor || design.subTextColor}" font-family="${escapeSvgText(
         layer.fontFamily || "'Roboto Mono', monospace",
-      )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" opacity="${layer.opacity}">${escapeSvgText(design.ticketCode || "TKT-SAMPLE-0001")}</text>`);
+      )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" letter-spacing="${Math.max(0, layer.letterSpacing || 0)}" opacity="${layer.opacity}">${escapeSvgText(design.ticketCode || "TKT-SAMPLE-0001")}</text>`);
     }
 
     if (layer.kind === "qr") {
@@ -824,7 +1004,8 @@ function buildTicketExportSvg(design) {
       const anchorX = getAnchorX(layer);
       const lines = wrapText(design.footerLabel, layer.fontSize, layer.width, 2);
       const safeLines = lines.map((line) => escapeSvgText(line));
-      const lineHeight = Math.round(layer.fontSize * 1.1);
+      const lineHeight = Math.round(layer.fontSize * (layer.lineHeight || 1.1));
+      const letterSpacing = Math.max(0, layer.letterSpacing || 0);
       const tspanMarkup = safeLines
         .map((line, index) => `<tspan x="${anchorX}" dy="${index === 0 ? 0 : lineHeight}">${line}</tspan>`)
         .join("");
@@ -832,7 +1013,7 @@ function buildTicketExportSvg(design) {
         ${buildGenericLayerImageMarkup(layer)}
         <text x="${anchorX}" y="${layer.y + layer.fontSize}" text-anchor="${anchor}" fill="${layer.fillColor || design.subTextColor}" font-family="${escapeSvgText(
           layer.fontFamily || "Nunito, Arial, sans-serif",
-        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" opacity="${layer.opacity}">${tspanMarkup}</text>
+        )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" letter-spacing="${letterSpacing}" opacity="${layer.opacity}">${tspanMarkup}</text>
       `);
     }
 
@@ -841,13 +1022,14 @@ function buildTicketExportSvg(design) {
       const anchorX = getAnchorX(layer);
       const lines = wrapText(design.footerLabel, layer.fontSize, layer.width, 2);
       const safeLines = lines.map((line) => escapeSvgText(line));
-      const lineHeight = Math.round(layer.fontSize * 1.1);
+      const lineHeight = Math.round(layer.fontSize * (layer.lineHeight || 1.1));
+      const letterSpacing = Math.max(0, layer.letterSpacing || 0);
       const tspanMarkup = safeLines
         .map((line, index) => `<tspan x="${anchorX}" dy="${index === 0 ? 0 : lineHeight}">${line}</tspan>`)
         .join("");
       return applyLayerTransform(layer, `<text x="${anchorX}" y="${layer.y + layer.fontSize}" text-anchor="${anchor}" fill="${layer.fillColor || design.subTextColor}" font-family="${escapeSvgText(
         layer.fontFamily || "Nunito, Arial, sans-serif",
-      )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" opacity="${layer.opacity}">${tspanMarkup}</text>`);
+      )}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}" letter-spacing="${letterSpacing}" opacity="${layer.opacity}">${tspanMarkup}</text>`);
     }
 
     return "";
@@ -883,6 +1065,11 @@ function buildTicketExportSvg(design) {
   `.trim();
 }
 
+// Sentinelle explicite "champ absent" : permet à resolveArchivedBuilderField de
+// signaler qu'aucune source (live/archive/fallback) n'a fourni de valeur, au lieu
+// de masquer l'absence derrière un fallback constant.
+const ARCHIVED_FIELD_MISSING = Symbol("archived-builder-field-missing");
+
 function resolveArchivedBuilderField({
   archivedContent,
   globalContent,
@@ -891,21 +1078,119 @@ function resolveArchivedBuilderField({
   recipientKey,
   archivedKey,
   fallback,
+  signalMissing = false,
 }) {
-  if (globalKey) {
-    return trimOrNull(globalContent && globalContent[globalKey]) || trimOrNull(archivedContent[archivedKey]) || fallback;
+  const resolved = globalKey
+    ? trimOrNull(globalContent && globalContent[globalKey]) || trimOrNull(archivedContent && archivedContent[archivedKey])
+    : trimOrNull(recipientContent && recipientContent[recipientKey]) || trimOrNull(archivedContent && archivedContent[archivedKey]);
+
+  if (resolved) {
+    return resolved;
   }
 
-  return trimOrNull(recipientContent && recipientContent[recipientKey]) || fallback;
+  // "champ absent" explicite quand le caller le demande (ex. placeholders optionnels).
+  if (signalMissing) {
+    return ARCHIVED_FIELD_MISSING;
+  }
+
+  return fallback;
 }
 
-function buildArchivedBuilderTicketSvg({ builderConfig, liveContent, globalContent, recipientContent }) {
+function buildArchivedBuilderTicketSvg({
+  builderConfig,
+  liveContent,
+  globalContent,
+  recipientContent,
+  recipientDynamicFields,
+}) {
   const design = builderConfig && builderConfig.design ? builderConfig.design : {};
   const archivedContent = builderConfig && builderConfig.content ? builderConfig.content : {};
   const textColor = trimOrNull(design.textColor) || "#FFFFFF";
   const { qrColor, qrPanelColor } = resolveQrPalette(textColor);
   const resolvedGlobalContent = globalContent || liveContent || {};
   const resolvedRecipientContent = recipientContent || liveContent || {};
+  const normalizedLayers = normalizeBuilderLayers(
+    Array.isArray(design.layers) ? design.layers : undefined,
+    design.canvasPresetId || "ticket-landscape",
+    normalizeBuilderCanvasSize(design.canvasSize),
+  );
+  const allowedGlobalFields = new Set();
+  normalizedLayers.forEach((layer) => {
+    switch (resolveBuilderLayerDynamicField(layer)) {
+      case "event_title":
+        allowedGlobalFields.add("title");
+        break;
+      case "event_schedule":
+        allowedGlobalFields.add("date");
+        allowedGlobalFields.add("time");
+        break;
+      case "event_location":
+        allowedGlobalFields.add("location");
+        break;
+      case "organizer_footer":
+        allowedGlobalFields.add("footerLabel");
+        break;
+      default:
+        break;
+    }
+  });
+  const allowedRecipientFields = new Set(
+    Array.isArray(recipientDynamicFields) && recipientDynamicFields.length > 0
+      ? recipientDynamicFields
+      : normalizedLayers.reduce((fields, layer) => {
+          switch (resolveBuilderLayerDynamicField(layer)) {
+            case "guest_name":
+              fields.push("guest");
+              break;
+            case "guest_email":
+              fields.push("guestEmail");
+              break;
+            case "guest_phone":
+              fields.push("guestPhone");
+              break;
+            case "custom_field":
+              fields.push("customFields");
+              break;
+            case "ticket_type":
+              fields.push("type");
+              break;
+            case "ticket_code":
+              fields.push("ticketCode");
+              break;
+            case "qr_code":
+              fields.push("qrDataUrl");
+              break;
+            default:
+              break;
+          }
+          return fields;
+        }, []),
+  );
+
+  // MIROIR frontend: valeurs runtime des placeholders texte dynamiques. La valeur
+  // recipient prime, sinon l'archive du builderConfig (content.guestEmail/...).
+  // La chaîne vide reste un résultat distinct (déclenche le masquage optionnel).
+  const resolveRuntimeText = (allowedKey, recipientKey, archivedKey) => {
+    if (!allowedRecipientFields.has(allowedKey)) {
+      return "";
+    }
+    return (
+      trimOrNull(resolvedRecipientContent && resolvedRecipientContent[recipientKey]) ||
+      trimOrNull(archivedContent && archivedContent[archivedKey]) ||
+      ""
+    );
+  };
+  const runtimeGuestEmail = resolveRuntimeText("guestEmail", "guestEmail", "guestEmail");
+  const runtimeGuestPhone = resolveRuntimeText("guestPhone", "guestPhone", "guestPhone");
+  const runtimeCustomFields =
+    allowedRecipientFields.has("customFields") &&
+    resolvedRecipientContent &&
+    typeof resolvedRecipientContent.customFields === "object" &&
+    resolvedRecipientContent.customFields !== null
+      ? resolvedRecipientContent.customFields
+      : archivedContent && typeof archivedContent.customFields === "object" && archivedContent.customFields !== null
+        ? archivedContent.customFields
+        : {};
 
   return buildTicketExportSvg({
     backgroundColor: trimOrNull(design.backgroundColor) || "#08131D",
@@ -926,26 +1211,53 @@ function buildArchivedBuilderTicketSvg({ builderConfig, liveContent, globalConte
     accentColor: trimOrNull(design.accentColor) || "#39C98B",
     textColor,
     subTextColor: trimOrNull(design.subTextColor) || "rgba(255,255,255,0.68)",
-    title: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "title", archivedKey: "title", fallback: "Event ticket" }),
-    date: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "date", archivedKey: "date", fallback: "Date TBD" }),
-    time: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "time", archivedKey: "time", fallback: "Time TBD" }),
-    location: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "location", archivedKey: "location", fallback: "Location TBD" }),
-    guest: resolveArchivedBuilderField({ archivedContent, recipientContent: resolvedRecipientContent, recipientKey: "guest", archivedKey: "guest", fallback: "Guest" }),
-    type: resolveArchivedBuilderField({ archivedContent, recipientContent: resolvedRecipientContent, recipientKey: "type", archivedKey: "type", fallback: "Standard" }),
-    footerLabel: resolveArchivedBuilderField({ archivedContent, globalContent: resolvedGlobalContent, globalKey: "footerLabel", archivedKey: "footerLabel", fallback: "Event Ticket" }),
+    title: resolveArchivedBuilderField({ archivedContent, globalContent: allowedGlobalFields.has("title") ? resolvedGlobalContent : null, globalKey: "title", archivedKey: "title", fallback: "Event ticket" }),
+    date: resolveArchivedBuilderField({ archivedContent, globalContent: allowedGlobalFields.has("date") ? resolvedGlobalContent : null, globalKey: "date", archivedKey: "date", fallback: "Date TBD" }),
+    time: resolveArchivedBuilderField({ archivedContent, globalContent: allowedGlobalFields.has("time") ? resolvedGlobalContent : null, globalKey: "time", archivedKey: "time", fallback: "Time TBD" }),
+    location: resolveArchivedBuilderField({ archivedContent, globalContent: allowedGlobalFields.has("location") ? resolvedGlobalContent : null, globalKey: "location", archivedKey: "location", fallback: "Location TBD" }),
+    guest: resolveArchivedBuilderField({
+      archivedContent,
+      recipientContent: allowedRecipientFields.has("guest") ? resolvedRecipientContent : null,
+      recipientKey: "guest",
+      archivedKey: "guest",
+      fallback: "Guest",
+    }),
+    type: resolveArchivedBuilderField({
+      archivedContent,
+      recipientContent: allowedRecipientFields.has("type") ? resolvedRecipientContent : null,
+      recipientKey: "type",
+      archivedKey: "type",
+      fallback: "Standard",
+    }),
+    footerLabel: resolveArchivedBuilderField({ archivedContent, globalContent: allowedGlobalFields.has("footerLabel") ? resolvedGlobalContent : null, globalKey: "footerLabel", archivedKey: "footerLabel", fallback: "Event Ticket" }),
     pattern: trimOrNull(design.pattern) || "none",
     backgroundPatternEnabled: design.backgroundPatternEnabled !== false,
     logoDataUrl: trimOrNull(design.logoDataUrl),
     qrColor,
     qrPanelColor,
-    ticketCode: resolveArchivedBuilderField({ archivedContent, recipientContent: resolvedRecipientContent, recipientKey: "ticketCode", archivedKey: "ticketCode", fallback: "TKT-SAMPLE-0001" }),
-    qrDataUrl: trimOrNull(resolvedRecipientContent.qrDataUrl),
+    ticketCode: resolveArchivedBuilderField({
+      archivedContent,
+      recipientContent: allowedRecipientFields.has("ticketCode") ? resolvedRecipientContent : null,
+      recipientKey: "ticketCode",
+      archivedKey: "ticketCode",
+      fallback: "TKT-SAMPLE-0001",
+    }),
+    qrDataUrl: allowedRecipientFields.has("qrDataUrl") ? trimOrNull(resolvedRecipientContent.qrDataUrl) : null,
+    // MIROIR frontend: valeurs runtime réelles email/phone/custom (chaîne vide
+    // distincte -> déclenche le masquage des placeholders optionnels).
+    guestEmail: runtimeGuestEmail,
+    guestPhone: runtimeGuestPhone,
+    customFields: runtimeCustomFields,
     canvasPresetId: design.canvasPresetId || "ticket-landscape",
     canvasSize: normalizeBuilderCanvasSize(design.canvasSize),
-    layers: Array.isArray(design.layers) ? design.layers : undefined,
+    layers: normalizedLayers,
   });
 }
 
 module.exports = {
   buildArchivedBuilderTicketSvg,
+  resolveArchivedBuilderField,
+  resolveBuilderDynamicTextValue,
+  normalizeBuilderLayers,
+  ARCHIVED_FIELD_MISSING,
 };

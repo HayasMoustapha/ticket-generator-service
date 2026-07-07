@@ -2,6 +2,7 @@ const QRCode = require('qrcode');
 const crypto = require('crypto');
 const redis = require('../../config/redis');
 const logger = require('../../utils/logger');
+const { database } = require('../../config/database');
 
 /**
  * Service de génération de QR codes avec signatures anti-fraude
@@ -515,17 +516,35 @@ class QRCodeService {
    */
   async getQRCodeFromDatabase(ticketId) {
     try {
-      // Implémentation de la récupération depuis la base de données
-      // Pour l'instant, retourne des données mockées
+      // Lecture réelle: le QR code persisté vit dans generated_tickets.qr_code_data,
+      // rattaché au ticket d'origine via job_id.
+      const result = await database.query(
+        `SELECT qr_code_data, ticket_code, generated_at
+         FROM generated_tickets
+         WHERE job_id = $1
+         ORDER BY generated_at DESC
+         LIMIT 1`,
+        [String(ticketId)]
+      );
+
+      if (!result.rows.length || !result.rows[0].qr_code_data) {
+        // Pas de QR persisté -> null (le caller renvoie une erreur "non trouvé" explicite).
+        return null;
+      }
+
+      const row = result.rows[0];
+
       return {
         ticketId,
-        qrCode: 'mock_qr_code_data',
-        format: 'base64',
-        generatedAt: new Date().toISOString()
+        ticketCode: row.ticket_code,
+        qrCode: row.qr_code_data,
+        format: typeof row.qr_code_data === 'string' && row.qr_code_data.startsWith('data:') ? 'data-url' : 'raw',
+        generatedAt: row.generated_at
       };
     } catch (error) {
       logger.error('Error getting QR code from database:', error);
-      return null;
+      // Remonter l'erreur pour éviter un faux "non trouvé" silencieux sur incident DB.
+      throw error;
     }
   }
 

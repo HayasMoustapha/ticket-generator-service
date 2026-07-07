@@ -44,6 +44,7 @@ const healthRoutes = require('./routes/health-routes');
 const ticketsRoutes = require('./api/routes/tickets.routes');
 const queuesRoutes = require('./api/routes/queues.routes');
 const { initializeTicketGeneratorService, shutdownTicketGeneratorService } = require('./services/ticket-generator-service');
+const { buildGlobalErrorHandler } = require('./error/global-error-handler');
 
 /**
  * �️ CLASSE PRINCIPALE DU SERVEUR
@@ -239,39 +240,11 @@ class TicketGeneratorServer {
     // ========================================
     // 🚨 GESTIONNAIRE D'ERREURS GLOBAL
     // ========================================
-    // Intercepte toutes les erreurs non gérées dans l'application
-    this.app.use((error, req, res, next) => {
-      // Enregistre l'erreur dans les logs avec détails complets
-      logger.error('Unhandled error', {
-        error: error.message,  // Message d'erreur
-        stack: error.stack,    // Pile d'appels pour débogage
-        method: req.method,   // Méthode HTTP de la requête
-        url: req.url,         // URL de la requête
-        ip: req.ip,           // IP du client
-        userAgent: req.get('User-Agent')  // Navigateur/client
-      });
-
-      // Vérifie si on est en mode développement pour décider du niveau de détail
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      
-      // Construction de la réponse d'erreur
-      const errorResponse = {
-        success: false,
-        message: isDevelopment ? error.message : 'Erreur interne du serveur',  // Message détaillé en dev, générique en prod
-        error: {
-          code: 'INTERNAL_SERVER_ERROR'
-        },
-        timestamp: new Date().toISOString()
-      };
-
-      // En développement, ajoute la pile d'appels pour le débogage
-      if (isDevelopment) {
-        errorResponse.error.stack = error.stack;
-      }
-
-      // Retour de l'erreur avec le code HTTP approprié
-      res.status(error.status || 500).json(errorResponse);
-    });
+    // Intercepte toutes les erreurs non gérées dans l'application.
+    // ERROR-UX : honore une erreur explicitement typée (statut + code stable)
+    // plutôt que d'écraser tout en 500 INTERNAL_SERVER_ERROR. Logique extraite
+    // dans src/error/global-error-handler.js pour être unitairement prouvable.
+    this.app.use(buildGlobalErrorHandler());
 
     // ========================================
     // ⚠️ GESTION DES PROMESSES REJETÉES

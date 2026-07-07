@@ -960,22 +960,57 @@ class BatchService {
    */
   async regenerateTicketInDatabase(ticketId, options = {}) {
     try {
-      // Implémentation de la régénération dans la base de données
-      // Pour l'instant, retourne des données mockées
+      // Vérifier que le ticket existe réellement avant de marquer une régénération.
+      // job_id référence le ticket d'origine (event-planner-core).
+      const existing = await database.query(
+        'SELECT id FROM generated_tickets WHERE job_id = $1 ORDER BY generated_at DESC LIMIT 1',
+        [String(ticketId)]
+      );
+
+      if (!existing.rows.length) {
+        return {
+          success: false,
+          code: 'TICKET_NOT_FOUND',
+          error: `Aucun ticket généré trouvé pour l'identifiant ${ticketId}`
+        };
+      }
+
+      const regeneratedAt = new Date().toISOString();
+
+      // Tracer la demande de régénération dans les logs (source de vérité auditable).
+      await database.query(
+        `INSERT INTO ticket_generation_logs (job_id, status, message, details, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+        [
+          String(ticketId),
+          'pending',
+          `Régénération demandée pour le ticket ${ticketId}`,
+          JSON.stringify({
+            ticket_id: ticketId,
+            action: 'regenerate',
+            reason: options.reason || 'Manual regeneration',
+            regenerate_qr: options.regenerateQR !== false,
+            regenerate_pdf: options.regeneratePDF !== false,
+            requested_at: regeneratedAt
+          })
+        ]
+      );
+
       return {
         success: true,
         data: {
           ticketId,
-          regeneratedAt: new Date().toISOString(),
+          regeneratedAt,
           reason: options.reason || 'Manual regeneration',
-          regenerateQR: options.regenerateQR,
-          regeneratePDF: options.regeneratePDF
+          regenerateQR: options.regenerateQR !== false,
+          regeneratePDF: options.regeneratePDF !== false
         }
       };
     } catch (error) {
       logger.error('Error regenerating ticket in database:', error);
       return {
         success: false,
+        code: 'DATABASE_QUERY_ERROR',
         error: error.message
       };
     }
@@ -988,19 +1023,52 @@ class BatchService {
    */
   async deleteTicketFromDatabase(ticketId) {
     try {
-      // Implémentation de la suppression dans la base de données
-      // Pour l'instant, retourne des données mockées
+      // Suppression réelle des tickets générés rattachés à ce job_id.
+      const deletion = await database.query(
+        'DELETE FROM generated_tickets WHERE job_id = $1 RETURNING id',
+        [String(ticketId)]
+      );
+
+      if (!deletion.rows.length) {
+        return {
+          success: false,
+          code: 'TICKET_NOT_FOUND',
+          error: `Aucun ticket généré trouvé pour l'identifiant ${ticketId}`
+        };
+      }
+
+      const deletedAt = new Date().toISOString();
+
+      // Tracer la suppression pour l'audit.
+      await database.query(
+        `INSERT INTO ticket_generation_logs (job_id, status, message, details, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+        [
+          String(ticketId),
+          'completed',
+          `Ticket ${ticketId} supprimé`,
+          JSON.stringify({
+            ticket_id: ticketId,
+            action: 'delete',
+            deleted_rows: deletion.rows.length,
+            deleted_at: deletedAt
+          })
+        ]
+      );
+
       return {
         success: true,
         data: {
           ticketId,
-          deletedAt: new Date().toISOString()
+          deletedRows: deletion.rows.length,
+          deletedAt
         }
       };
     } catch (error) {
       logger.error('Error deleting ticket from database:', error);
       return {
         success: false,
+        code: 'DATABASE_QUERY_ERROR',
         error: error.message
       };
     }

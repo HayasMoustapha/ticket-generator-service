@@ -1,0 +1,7 @@
+{
+  "testEnvironment": "node",
+  "setupFiles": ["<rootDir>/tests/setup/jest.env.setup.js"],
+  "testTimeout": 30000,
+  "verbose": true,
+  "testMatch": ["<rootDir>/tests/integration/tickets.test.js"]
+}

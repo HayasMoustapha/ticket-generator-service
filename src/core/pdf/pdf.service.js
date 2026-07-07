@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const qrCodeService = require('../qrcode/qrcode.service');
 const ticketGenerationService = require('../../services/ticket-generation.service');
 const logger = require('../../utils/logger');
+const { database } = require('../../config/database');
 
 /**
  * Service de génération de PDF pour les tickets d'événements
@@ -287,7 +288,10 @@ class PDFService {
         filename: `ticket-${ticketData.id}.pdf`,
         generatedAt: new Date().toISOString(),
         renderMode: artifact.renderMode,
-        renderEngine: artifact.renderEngine
+        renderEngine: artifact.renderEngine,
+        canonicalProcess: artifact.canonicalProcess,
+        exactRasterSha256: artifact.exactRasterSha256,
+        renderScale: artifact.renderScale
       };
 
     } catch (error) {
@@ -669,28 +673,79 @@ class PDFService {
    * @returns {Promise<Object>} PDF avec QR code intégré
    */
   async integrateQRCode(pdfBuffer, qrCodeBuffer, options = {}) {
+    if (!Buffer.isBuffer(qrCodeBuffer) || qrCodeBuffer.length === 0) {
+      return {
+        success: false,
+        code: 'INVALID_QR_BUFFER',
+        error: 'Buffer QR code manquant ou vide pour intégration PDF'
+      };
+    }
+
+    // pdfkit est en écriture seule: il ne sait pas parser/éditer un PDF existant.
+    // Modifier un pdfBuffer déjà rendu nécessiterait une lib de parsing (ex: pdf-lib),
+    // absente des dépendances -> on échoue explicitement plutôt que de faire un faux succès.
+    if (Buffer.isBuffer(pdfBuffer) && pdfBuffer.length > 0) {
+      return {
+        success: false,
+        code: 'PDF_OVERLAY_UNSUPPORTED',
+        error:
+          "L'incrustation d'un QR code dans un PDF déjà rendu n'est pas supportée " +
+          '(pdfkit est en écriture seule). Le QR code est intégré au moment du rendu canonique. ' +
+          'Pour générer un document QR autonome, appeler integrateQRCode sans pdfBuffer.'
+      };
+    }
+
+    // Cas supporté: produire un nouveau document PDF d'une page avec le QR code embarqué.
     try {
-      // Cette méthode nécessite une bibliothèque comme pdfkit-image
-      // Pour l'instant, retourner le PDF original
-      
-      logger.info('QR code integration (placeholder)', {
-        pdfSize: pdfBuffer.length,
+      const composedPdf = await new Promise((resolve, reject) => {
+        try {
+          const doc = new PDFDocument({
+            size: options.size || 'A4',
+            margins: this.defaultOptions.margins,
+            info: this.defaultOptions.info
+          });
+
+          const chunks = [];
+          doc.on('data', (chunk) => chunks.push(chunk));
+          doc.on('end', () => resolve(Buffer.concat(chunks)));
+          doc.on('error', reject);
+
+          if (options.title) {
+            doc.fontSize(16).text(String(options.title), { align: 'center' });
+            doc.moveDown();
+          }
+
+          const qrSize = Number(options.qrSize) || 200;
+          const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+          const x = doc.page.margins.left + Math.max(0, (pageWidth - qrSize) / 2);
+
+          // doc.image accepte un Buffer PNG/JPG (sortie standard de qrcode.toBuffer).
+          doc.image(qrCodeBuffer, x, doc.y, { width: qrSize, height: qrSize });
+
+          doc.end();
+        } catch (innerError) {
+          reject(innerError);
+        }
+      });
+
+      logger.info('QR code embedded into standalone PDF', {
+        pdfSize: composedPdf.length,
         qrCodeSize: qrCodeBuffer.length
       });
 
       return {
         success: true,
-        pdfBuffer,
-        hasQRCode: false,
-        message: 'QR code integration not implemented yet'
+        pdfBuffer: composedPdf,
+        hasQRCode: true
       };
     } catch (error) {
       logger.error('Failed to integrate QR code', {
         error: error.message
       });
-      
+
       return {
         success: false,
+        code: 'QR_PDF_EMBED_FAILED',
         error: `Échec d'intégration du QR code: ${error.message}`
       };
     }
@@ -842,17 +897,51 @@ class PDFService {
    */
   async getPDFFromDatabase(ticketId) {
     try {
-      // Implémentation de la récupération depuis la base de données
-      // Pour l'instant, retourne des données mockées
+      // Le PDF persisté est référencé par son chemin disque dans generated_tickets.pdf_file_path,
+      // rattaché au ticket d'origine via job_id.
+      const result = await database.query(
+        `SELECT pdf_file_path, ticket_code, generated_at
+         FROM generated_tickets
+         WHERE job_id = $1
+         ORDER BY generated_at DESC
+         LIMIT 1`,
+        [String(ticketId)]
+      );
+
+      if (!result.rows.length || !result.rows[0].pdf_file_path) {
+        // Aucun PDF persisté -> null (le caller renvoie une erreur explicite "PDF non trouvé").
+        return null;
+      }
+
+      const row = result.rows[0];
+
+      let pdfBuffer;
+      try {
+        pdfBuffer = await fs.readFile(row.pdf_file_path);
+      } catch (readError) {
+        // Le chemin est référencé mais le fichier est introuvable: erreur explicite, pas de faux succès.
+        logger.error('Stored PDF file is missing on disk', {
+          ticketId,
+          pdfFilePath: row.pdf_file_path,
+          error: readError.message
+        });
+        const err = new Error(`Fichier PDF introuvable sur le disque pour le ticket ${ticketId}`);
+        err.code = 'PDF_FILE_MISSING';
+        throw err;
+      }
+
       return {
         ticketId,
-        pdfData: 'mock_pdf_data',
+        ticketCode: row.ticket_code,
+        pdfFilePath: row.pdf_file_path,
+        pdfData: pdfBuffer.toString('base64'),
         format: 'base64',
-        generatedAt: new Date().toISOString()
+        generatedAt: row.generated_at
       };
     } catch (error) {
       logger.error('Error getting PDF from database:', error);
-      return null;
+      // Remonter l'erreur pour éviter un faux "non trouvé" silencieux sur incident DB/fichier.
+      throw error;
     }
   }
 }

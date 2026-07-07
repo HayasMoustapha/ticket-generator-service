@@ -4,8 +4,92 @@ const os = require('os');
 const crypto = require('crypto');
 const AdmZip = require('adm-zip');
 const puppeteer = require('puppeteer');
+const PDFDocument = require('pdfkit');
+
+function clampNumber(value, min, max) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return min;
+  }
+
+  return Math.min(Math.max(numericValue, min), max);
+}
+
+function hashBufferSha256(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
 
 class HtmlTemplateService {
+  collectPdfKitBuffer(doc) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
+  }
+
+  wrapExactPngInPdf({ pngBuffer, pngSha256, width, height }) {
+    const pageWidth = width * 0.75;
+    const pageHeight = height * 0.75;
+    const doc = new PDFDocument({
+      autoFirstPage: false,
+      margin: 0,
+      info: {
+        Title: 'Event Ticket',
+        Author: 'Event Planner',
+        Subject: `exact-raster-sha256:${pngSha256}`,
+        Keywords: `exact-raster-sha256:${pngSha256}`,
+        Creator: 'Event Planner Ticket Generator'
+      }
+    });
+    const pdfBufferPromise = this.collectPdfKitBuffer(doc);
+
+    doc.addPage({ size: [pageWidth, pageHeight], margin: 0 });
+    doc.image(pngBuffer, 0, 0, { width: pageWidth, height: pageHeight });
+    doc.end();
+
+    return pdfBufferPromise;
+  }
+
+  async waitForRenderableResources(page) {
+    await page.evaluate(async () => {
+      const cssBackgroundUrls = Array.from(document.querySelectorAll('*')).flatMap((element) => {
+        const backgroundImage = window.getComputedStyle(element).backgroundImage;
+        if (!backgroundImage || backgroundImage === 'none') {
+          return [];
+        }
+
+        const matches = backgroundImage.matchAll(/url\((['"]?)(.*?)\1\)/g);
+        return Array.from(matches, (match) => match[2]).filter(Boolean);
+      });
+
+      if (document.fonts && document.fonts.ready) {
+        await document.fonts.ready;
+      }
+
+      await Promise.all([
+        ...Array.from(document.images).map((image) => {
+          if (image.complete) {
+            return Promise.resolve();
+          }
+
+          return new Promise((resolve) => {
+            const finish = () => resolve();
+            image.addEventListener('load', finish, { once: true });
+            image.addEventListener('error', finish, { once: true });
+          });
+        }),
+        ...cssBackgroundUrls.map((url) => new Promise((resolve) => {
+          const image = new Image();
+          image.onload = () => resolve();
+          image.onerror = () => resolve();
+          image.src = url;
+        })),
+      ]);
+    });
+  }
+
   parseSvgDimensions(svgMarkup) {
     const viewBoxMatch = svgMarkup.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/i);
     if (viewBoxMatch) {
@@ -88,7 +172,6 @@ class HtmlTemplateService {
     const dimensions = this.parseSvgDimensions(svgMarkup);
     const width = options.width || dimensions.width;
     const height = options.height || dimensions.height;
-    const encodedSvg = Buffer.from(svgMarkup, 'utf8').toString('base64');
 
     return this.renderTemplateToPdf(
       `<!doctype html>
@@ -104,19 +187,95 @@ class HtmlTemplateService {
               overflow: hidden;
               background: transparent;
             }
-            img {
+            body > svg {
               display: block;
               width: 100%;
               height: 100%;
-              object-fit: fill;
             }
           </style>
         </head>
         <body>
-          <img alt="Ticket" src="data:image/svg+xml;base64,${encodedSvg}" />
+          ${svgMarkup}
         </body>
       </html>`,
       { width, height },
+    );
+  }
+
+  async renderTemplateToExactRasterPdf(htmlContent, options = {}) {
+    const width = Math.round(options.width || 760);
+    const height = Math.round(options.height || 420);
+    const scale = Math.round(clampNumber(options.scale || 1, 1, 4));
+
+    const browser = await puppeteer.launch({
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width, height, deviceScaleFactor: scale });
+      await page.emulateMediaType('screen');
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+      await this.waitForRenderableResources(page);
+
+      const pngBuffer = Buffer.from(await page.screenshot({
+        type: 'png',
+        clip: { x: 0, y: 0, width, height },
+        captureBeyondViewport: false,
+        omitBackground: false
+      }));
+      const pngSha256 = hashBufferSha256(pngBuffer);
+      const pdfBuffer = await this.wrapExactPngInPdf({
+        pngBuffer,
+        pngSha256,
+        width,
+        height
+      });
+
+      return {
+        pdfBuffer,
+        pngBuffer,
+        pngSha256,
+        width,
+        height,
+        scale
+      };
+    } finally {
+      await browser.close();
+    }
+  }
+
+  async renderSvgToExactRasterPdf(svgMarkup, options = {}) {
+    const dimensions = this.parseSvgDimensions(svgMarkup);
+    const width = options.width || dimensions.width || 760;
+    const height = options.height || dimensions.height || 420;
+
+    return this.renderTemplateToExactRasterPdf(
+      `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            html, body {
+              margin: 0;
+              padding: 0;
+              width: ${width}px;
+              height: ${height}px;
+              overflow: hidden;
+              background: transparent;
+            }
+            body > svg {
+              display: block;
+              width: 100%;
+              height: 100%;
+            }
+          </style>
+        </head>
+        <body>
+          ${svgMarkup}
+        </body>
+      </html>`,
+      { width, height, scale: options.scale },
     );
   }
 
